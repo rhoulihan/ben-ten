@@ -18,37 +18,142 @@ Ben10 persists context across Claude Code sessions, allowing Claude to remember 
 
 ## Installation
 
+### Prerequisites
+
+- Node.js 20.0.0 or higher
+- [Claude Code](https://claude.ai/claude-code) CLI installed and configured
+
+### Step 1: Install Ben10 Globally
+
 ```bash
 npm install -g ben10
 ```
 
-Or install locally in your project:
+Verify the installation:
 
 ```bash
-npm install --save-dev ben10
+ben10 --version
 ```
 
-## Quick Start
+### Step 2: Configure Claude Code Hooks
 
-1. **Initialize Ben10 in your project:**
+Add hook configuration to your Claude Code settings. You can configure hooks at the user level (applies to all projects) or project level.
+
+**User-level configuration** (`~/.claude/settings.json`):
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "ben10 hook"
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "ben10 hook"
+      }
+    ]
+  }
+}
+```
+
+**Project-level configuration** (`.claude/settings.json` in your project root):
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "ben10 hook"
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "ben10 hook"
+      }
+    ]
+  }
+}
+```
+
+#### Hook Events Explained
+
+| Hook | When It Fires | Ben10 Action |
+|------|---------------|--------------|
+| `SessionStart` | When Claude Code starts or resumes | Loads saved context into the conversation |
+| `Stop` | After each Claude response, before waiting for input | Saves current context from transcript |
+| `SessionEnd` | When the session terminates | Saves final context |
+
+**Recommended setup:** Use `SessionStart` + `Stop` for the best experience. This ensures context is loaded at startup and saved after every interaction.
+
+### Step 3: Configure MCP Server (Optional)
+
+For programmatic access to context (e.g., having Claude call `ben10_save` directly), add the MCP server configuration.
+
+Create `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "ben10": {
+      "command": "ben10",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+Or add to your user-level MCP configuration (`~/.claude/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "ben10": {
+      "command": "ben10",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+The MCP server exposes these tools to Claude:
+
+- `ben10_status` - Check if context exists
+- `ben10_save` - Save context with custom summary, keyFiles, and activeTasks
+- `ben10_load` - Load existing context
+- `ben10_clear` - Delete context
+
+### Step 4: Initialize Your Project (Optional)
 
 ```bash
 cd your-project
 ben10 init
 ```
 
-2. **Configure Claude Code hooks** by adding to `.claude/settings.json`:
+This creates a `.ben10/` directory in your project. This step is optional—Ben10 will create the directory automatically when first saving context.
 
-```json
-{
-  "hooks": {
-    "SessionStart": ["ben10 hook"],
-    "SessionEnd": ["ben10 hook"]
-  }
-}
-```
+### Verifying Installation
 
-3. **That's it!** Ben10 will now automatically persist context between sessions.
+1. Start a new Claude Code session in your project
+2. You should see "Ben10 Context Loaded" in the startup output (if context exists)
+3. After Claude responds, check that context was saved:
+   ```bash
+   ben10 status
+   ```
+
+## Quick Start
+
+Once installed, Ben10 works automatically:
+
+1. **Start Claude Code** - Context is loaded from `.ben10/context.json` if it exists
+2. **Work with Claude** - Context is saved after each response (with `Stop` hook)
+3. **End session** - Context persists for next time
+4. **Resume later** - Previous context is restored automatically
 
 ## How It Works
 
