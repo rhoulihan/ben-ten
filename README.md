@@ -49,12 +49,6 @@ Add hook configuration to your Claude Code settings. You can configure hooks at 
         "type": "command",
         "command": "ben10 hook"
       }
-    ],
-    "Stop": [
-      {
-        "type": "command",
-        "command": "ben10 hook"
-      }
     ]
   }
 }
@@ -70,12 +64,6 @@ Add hook configuration to your Claude Code settings. You can configure hooks at 
         "type": "command",
         "command": "ben10 hook"
       }
-    ],
-    "Stop": [
-      {
-        "type": "command",
-        "command": "ben10 hook"
-      }
     ]
   }
 }
@@ -86,10 +74,10 @@ Add hook configuration to your Claude Code settings. You can configure hooks at 
 | Hook | When It Fires | Ben10 Action |
 |------|---------------|--------------|
 | `SessionStart` | When Claude Code starts or resumes | Loads saved context into the conversation |
-| `Stop` | After each Claude response, before waiting for input | Saves current context from transcript |
+| `SessionStart` | After compaction (`source: "compact"`) | Saves the compacted summary |
 | `SessionEnd` | When the session terminates | Saves final context |
 
-**Recommended setup:** Use `SessionStart` + `Stop` for the best experience. This ensures context is loaded at startup and saved after every interaction.
+Context is primarily saved when compaction occurs (triggered automatically by Claude Code when the context window fills up). The compacted summary is captured and persisted for the next session.
 
 ### Step 3: Configure MCP Server (Optional)
 
@@ -141,7 +129,7 @@ This creates a `.ben10/` directory in your project. This step is optional—Ben1
 
 1. Start a new Claude Code session in your project
 2. You should see "Ben10 Context Loaded" in the startup output (if context exists)
-3. After Claude responds, check that context was saved:
+3. Check context status anytime:
    ```bash
    ben10 status
    ```
@@ -151,7 +139,7 @@ This creates a `.ben10/` directory in your project. This step is optional—Ben1
 Once installed, Ben10 works automatically:
 
 1. **Start Claude Code** - Context is loaded from `.ben10/context.json` if it exists
-2. **Work with Claude** - Context is saved after each response (with `Stop` hook)
+2. **Work with Claude** - When compaction occurs, the summary is saved automatically
 3. **End session** - Context persists for next time
 4. **Resume later** - Previous context is restored automatically
 
