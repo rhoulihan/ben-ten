@@ -1,5 +1,10 @@
 # Ben10
 
+[![CI](https://github.com/rhoulihan/Ben10/actions/workflows/ci.yml/badge.svg)](https://github.com/rhoulihan/Ben10/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
+[![Tests](https://img.shields.io/badge/tests-139%20passing-brightgreen)](https://github.com/rhoulihan/Ben10)
+
 **Photographic memory for Claude Code** - Named after Ben Tennyson's legendary photographic memory.
 
 Ben10 persists context across Claude Code sessions, allowing Claude to remember what you were working on even after compaction or session restarts.
