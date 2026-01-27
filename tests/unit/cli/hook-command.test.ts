@@ -1,14 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   type FileSystem,
   createMemoryFs,
 } from '../../../src/adapters/fs/memory-fs.js';
-import {
-  type HookCommandResult,
-  runHookCommand,
-} from '../../../src/cli/hook-command.js';
+import { runHookCommand } from '../../../src/cli/hook-command.js';
 import type { ContextData } from '../../../src/core/types.js';
-import { LogLevel, createLogger } from '../../../src/infrastructure/logger.js';
 import { isErr, isOk } from '../../../src/infrastructure/result.js';
 import {
   BEN10_DIR,
@@ -41,17 +37,7 @@ describe('hook-command', () => {
       }
     });
 
-    it('handles SessionStart with compact source', async () => {
-      // Create transcript file
-      const transcriptContent = `${JSON.stringify({
-        type: 'summary',
-        summary: 'Compacted summary content',
-      })}\n`;
-      await fs.writeFile(
-        '/home/user/.claude/sessions/test.jsonl',
-        transcriptContent,
-      );
-
+    it('handles SessionStart with compact source (load only, no save)', async () => {
       const input = JSON.stringify({
         session_id: 'test-session',
         transcript_path: '/home/user/.claude/sessions/test.jsonl',
@@ -67,23 +53,14 @@ describe('hook-command', () => {
         expect(result.value.success).toBe(true);
       }
 
-      // Verify context was saved
+      // Verify context was NOT saved (saving is via MCP only)
       const exists = await fs.exists(
         `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
       );
-      expect(exists).toBe(true);
+      expect(exists).toBe(false);
     });
 
-    it('handles SessionEnd', async () => {
-      const transcriptContent = `${JSON.stringify({
-        type: 'summary',
-        summary: 'Session end summary',
-      })}\n`;
-      await fs.writeFile(
-        '/home/user/.claude/sessions/test.jsonl',
-        transcriptContent,
-      );
-
+    it('handles SessionEnd as no-op (saving via MCP only)', async () => {
       const input = JSON.stringify({
         session_id: 'test-session',
         transcript_path: '/home/user/.claude/sessions/test.jsonl',

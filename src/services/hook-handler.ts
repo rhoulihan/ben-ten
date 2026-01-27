@@ -1,10 +1,6 @@
 import type { FileSystem } from '../adapters/fs/memory-fs.js';
 import type { ContextData, HookInput } from '../core/types.js';
-import {
-  type Ben10Error,
-  ErrorCode,
-  createError,
-} from '../infrastructure/errors.js';
+import type { Ben10Error } from '../infrastructure/errors.js';
 import type { Logger } from '../infrastructure/logger.js';
 import { type Result, err, ok } from '../infrastructure/result.js';
 import { createContextService } from './context-service.js';
@@ -17,19 +13,11 @@ export interface SessionStartResult {
   context?: ContextData;
 }
 
-/** Result of handling a SessionEnd event */
-export interface SessionEndResult {
-  contextSaved: boolean;
-}
-
 /** Result of handling a PreCompact event */
 export type PreCompactResult = Record<string, never>;
 
 /** Union of all hook results */
-export type HookResult =
-  | SessionStartResult
-  | SessionEndResult
-  | PreCompactResult;
+export type HookResult = SessionStartResult | PreCompactResult;
 
 /**
  * Handler for Claude Code lifecycle hooks.
@@ -39,11 +27,6 @@ export interface HookHandler {
   handleSessionStart(
     input: HookInput,
   ): Promise<Result<SessionStartResult, Ben10Error>>;
-
-  /** Handle a SessionEnd event */
-  handleSessionEnd(
-    input: HookInput,
-  ): Promise<Result<SessionEndResult, Ben10Error>>;
 
   /** Handle a PreCompact event */
   handlePreCompact(
@@ -58,57 +41,6 @@ export interface HookHandlerDeps {
   fs: FileSystem;
   logger: Logger;
 }
-
-/**
- * Extract summary from a Claude Code transcript file.
- * The transcript is a JSONL file with various message types.
- * We look for the 'summary' type which contains the compaction output.
- */
-const extractSummaryFromTranscript = async (
-  fs: FileSystem,
-  transcriptPath: string,
-  logger: Logger,
-): Promise<Result<string, Ben10Error>> => {
-  const readResult = await fs.readFile(transcriptPath);
-  if (!readResult.ok) {
-    return err(readResult.error);
-  }
-
-  const lines = readResult.value.trim().split('\n');
-
-  // Look for summary entries in the transcript
-  for (const line of lines) {
-    try {
-      const entry = JSON.parse(line);
-      if (entry.type === 'summary' && typeof entry.summary === 'string') {
-        return ok(entry.summary);
-      }
-    } catch {
-      // Skip malformed lines
-      logger.debug('Skipping malformed transcript line');
-    }
-  }
-
-  // If no summary found, concatenate all assistant messages as fallback
-  const messages: string[] = [];
-  for (const line of lines) {
-    try {
-      const entry = JSON.parse(line);
-      if (entry.type === 'assistant' && typeof entry.content === 'string') {
-        messages.push(entry.content);
-      }
-    } catch {
-      // Skip malformed lines
-    }
-  }
-
-  if (messages.length > 0) {
-    return ok(messages.join('\n'));
-  }
-
-  // Return empty summary if nothing found
-  return ok('');
-};
 
 /**
  * Creates a hook handler for Claude Code lifecycle events.
@@ -161,45 +93,26 @@ export const createHookHandler = (deps: HookHandlerDeps): HookHandler => {
         }
 
         case 'compact': {
-          // Read the freshly compacted transcript and save it
-          const summaryResult = await extractSummaryFromTranscript(
-            fs,
-            input.transcript_path,
-            logger,
-          );
-          if (!summaryResult.ok) {
-            return err(summaryResult.error);
-          }
-
-          // Load existing context to preserve createdAt
-          let createdAt = Date.now();
+          // After compaction, just load existing context if available
+          // Saving is handled by ben10_save MCP tool
+          logger.debug('Compaction occurred, loading existing context');
           if (await contextService.hasContext()) {
-            const existingResult = await contextService.loadContext();
-            if (existingResult.ok) {
-              createdAt = existingResult.value.createdAt;
+            const loadResult = await contextService.loadContext();
+            if (loadResult.ok) {
+              logger.info('Context loaded after compaction', {
+                sessionId: loadResult.value.sessionId,
+              });
+              return ok({
+                contextLoaded: true,
+                contextSaved: false,
+                contextCleared: false,
+                context: loadResult.value,
+              });
             }
           }
-
-          const contextData: ContextData = {
-            version: '1.0.0',
-            createdAt,
-            updatedAt: Date.now(),
-            sessionId: input.session_id,
-            summary: summaryResult.value,
-          };
-
-          const saveResult = await contextService.saveContext(contextData);
-          if (!saveResult.ok) {
-            return err(saveResult.error);
-          }
-
-          logger.info('Context saved after compaction', {
-            sessionId: input.session_id,
-          });
-
           return ok({
             contextLoaded: false,
-            contextSaved: true,
+            contextSaved: false,
             contextCleared: false,
           });
         }
@@ -245,56 +158,6 @@ export const createHookHandler = (deps: HookHandlerDeps): HookHandler => {
       }
     },
 
-    async handleSessionEnd(input) {
-      const projectDir = input.cwd;
-      const contextService = createContextService({ fs, logger, projectDir });
-
-      logger.debug('Handling SessionEnd', {
-        sessionId: input.session_id,
-        projectDir,
-      });
-
-      // Read the transcript
-      const summaryResult = await extractSummaryFromTranscript(
-        fs,
-        input.transcript_path,
-        logger,
-      );
-      if (!summaryResult.ok) {
-        return err(summaryResult.error);
-      }
-
-      // Load existing context to preserve createdAt
-      let createdAt = Date.now();
-      if (await contextService.hasContext()) {
-        const existingResult = await contextService.loadContext();
-        if (existingResult.ok) {
-          createdAt = existingResult.value.createdAt;
-        }
-      }
-
-      const contextData: ContextData = {
-        version: '1.0.0',
-        createdAt,
-        updatedAt: Date.now(),
-        sessionId: input.session_id,
-        summary: summaryResult.value,
-      };
-
-      const saveResult = await contextService.saveContext(contextData);
-      if (!saveResult.ok) {
-        return err(saveResult.error);
-      }
-
-      logger.info('Context saved on session end', {
-        sessionId: input.session_id,
-      });
-
-      return ok({
-        contextSaved: true,
-      });
-    },
-
     async handlePreCompact(_input) {
       // PreCompact is a no-op - we use SessionStart with source="compact" instead
       logger.debug('PreCompact is a no-op');
@@ -305,18 +168,19 @@ export const createHookHandler = (deps: HookHandlerDeps): HookHandler => {
       switch (input.hook_event_name) {
         case 'SessionStart':
           return handler.handleSessionStart(input);
-        case 'SessionEnd':
-          return handler.handleSessionEnd(input);
         case 'PreCompact':
           return handler.handlePreCompact(input);
         default:
-          return err(
-            createError(
-              ErrorCode.HOOK_INVALID_INPUT,
-              `Unknown hook event: ${input.hook_event_name}`,
-              { hookEventName: input.hook_event_name },
-            ),
-          );
+          // SessionEnd and other events are no-ops
+          // Saving is handled by ben10_save MCP tool
+          logger.debug('Ignoring hook event', {
+            hookEventName: input.hook_event_name,
+          });
+          return ok({
+            contextLoaded: false,
+            contextSaved: false,
+            contextCleared: false,
+          });
       }
     },
   };

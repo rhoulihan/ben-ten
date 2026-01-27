@@ -74,14 +74,14 @@ Add hook configuration to your Claude Code settings. You can configure hooks at 
 | Hook | When It Fires | Ben10 Action |
 |------|---------------|--------------|
 | `SessionStart` | When Claude Code starts or resumes | Loads saved context into the conversation |
-| `SessionStart` | After compaction (`source: "compact"`) | Saves the compacted summary |
-| `SessionEnd` | When the session terminates | Saves final context |
+| `SessionStart` | After compaction (`source: "compact"`) | Loads existing context (no auto-save) |
+| `SessionStart` | With `source: "clear"` | Deletes existing context |
 
-Context is primarily saved when compaction occurs (triggered automatically by Claude Code when the context window fills up). The compacted summary is captured and persisted for the next session.
+**Note:** Context is saved only via the `ben10_save` MCP tool. This gives Claude control over when and what to save.
 
-### Step 3: Configure MCP Server (Optional)
+### Step 3: Configure MCP Server (Required for Saving)
 
-For programmatic access to context (e.g., having Claude call `ben10_save` directly), add the MCP server configuration.
+The MCP server provides the `ben10_save` tool that Claude uses to save context.
 
 Create `.mcp.json` in your project root:
 
@@ -136,24 +136,23 @@ This creates a `.ben10/` directory in your project. This step is optional—Ben1
 
 ## Quick Start
 
-Once installed, Ben10 works automatically:
+Once installed, Ben10 works like this:
 
 1. **Start Claude Code** - Context is loaded from `.ben10/context.json` if it exists
-2. **Work with Claude** - When compaction occurs, the summary is saved automatically
-3. **End session** - Context persists for next time
+2. **Work with Claude** - Claude can call `ben10_save` to save context at any time
+3. **End session** - Saved context persists for next time
 4. **Resume later** - Previous context is restored automatically
 
 ## How It Works
 
-Ben10 integrates with Claude Code through lifecycle hooks:
+Ben10 integrates with Claude Code through hooks and MCP:
 
-| Event | Source | Action |
-|-------|--------|--------|
-| SessionStart | `startup` | Load existing context from `.ben10/context.json` |
-| SessionStart | `compact` | Save freshly-compacted summary to context |
-| SessionStart | `resume` | Load existing context |
-| SessionStart | `clear` | Delete existing context |
-| SessionEnd | - | Save current session summary to context |
+| Component | Action |
+|-----------|--------|
+| `SessionStart` hook | Loads existing context from `.ben10/context.json` |
+| `ben10_save` MCP tool | Saves context (summary, keyFiles, activeTasks) |
+| `ben10_load` MCP tool | Loads context programmatically |
+| `ben10_clear` MCP tool | Deletes context |
 
 Context is stored in `.ben10/context.json` at your project root.
 

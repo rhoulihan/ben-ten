@@ -12,7 +12,6 @@ export {
   type HookHandler,
   type HookHandlerDeps,
   type SessionStartResult,
-  type SessionEndResult,
   type PreCompactResult,
   type HookResult,
 } from './hook-handler.js';
