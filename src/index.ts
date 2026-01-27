@@ -71,8 +71,10 @@ export {
 // MCP Server
 export {
   createBen10Server,
+  startMcpServer,
   type Ben10Server,
   type Ben10ServerDeps,
+  type McpTransportDeps,
   type ToolDefinition,
   type ResourceDefinition,
   type ResourceContent,

@@ -10,3 +10,5 @@ export {
   type SaveResult,
   type ClearResult,
 } from './server.js';
+
+export { startMcpServer, type McpTransportDeps } from './transport.js';

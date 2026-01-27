@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { createNodeFs } from '../adapters/fs/node-fs.js';
 import { main as hookMain } from '../cli/hook-command.js';
 import { LogLevel, createLogger } from '../infrastructure/logger.js';
+import { startMcpServer } from '../mcp/transport.js';
 import { createContextService } from '../services/context-service.js';
 
 const program = new Command();
@@ -155,6 +156,24 @@ program
         2,
       ),
     );
+  });
+
+program
+  .command('serve')
+  .description('Start Ben10 as an MCP server (stdio transport)')
+  .action(async () => {
+    const fs = createNodeFs();
+    const logger = createLogger({ level: LogLevel.INFO });
+    const projectDir = process.cwd();
+
+    try {
+      await startMcpServer({ fs, logger, projectDir });
+    } catch (error) {
+      logger.error('Failed to start MCP server', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      process.exit(1);
+    }
   });
 
 program.parse();
