@@ -1,5 +1,5 @@
 import {
-  type Ben10Error,
+  type BenTenError,
   ErrorCode,
   createError,
 } from '../../infrastructure/errors.js';
@@ -34,16 +34,16 @@ export interface RmOptions {
  * Allows swapping real FS for in-memory FS in tests.
  */
 export interface FileSystem {
-  readFile(path: string): Promise<Result<string, Ben10Error>>;
-  writeFile(path: string, content: string): Promise<Result<void, Ben10Error>>;
+  readFile(path: string): Promise<Result<string, BenTenError>>;
+  writeFile(path: string, content: string): Promise<Result<void, BenTenError>>;
   exists(path: string): Promise<boolean>;
   mkdir(
     path: string,
     options?: MkdirOptions,
-  ): Promise<Result<void, Ben10Error>>;
-  readdir(path: string): Promise<Result<string[], Ben10Error>>;
-  rm(path: string, options?: RmOptions): Promise<Result<void, Ben10Error>>;
-  stat(path: string): Promise<Result<FileStats, Ben10Error>>;
+  ): Promise<Result<void, BenTenError>>;
+  readdir(path: string): Promise<Result<string[], BenTenError>>;
+  rm(path: string, options?: RmOptions): Promise<Result<void, BenTenError>>;
+  stat(path: string): Promise<Result<FileStats, BenTenError>>;
 }
 
 interface FsNode {

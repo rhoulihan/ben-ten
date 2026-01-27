@@ -1,15 +1,20 @@
 import type { FileSystem } from '../adapters/fs/memory-fs.js';
-import { type ContextData, parseContextData } from '../core/types.js';
 import {
-  type Ben10Error,
+  type ContextData,
+  type ContextMetadata,
+  parseContextData,
+  parseContextMetadata,
+} from '../core/types.js';
+import {
+  type BenTenError,
   ErrorCode,
   createError,
 } from '../infrastructure/errors.js';
 import type { Logger } from '../infrastructure/logger.js';
 import { type Result, err, ok } from '../infrastructure/result.js';
 
-/** Directory name for Ben10 storage */
-export const BEN10_DIR = '.ben10';
+/** Directory name for Ben-Ten storage */
+export const BEN10_DIR = '.ben-ten';
 
 /** Context data file name */
 export const CONTEXT_FILE = 'context.json';
@@ -25,19 +30,28 @@ export interface ContextService {
   hasContext(): Promise<boolean>;
 
   /** Load context from disk */
-  loadContext(): Promise<Result<ContextData, Ben10Error>>;
+  loadContext(): Promise<Result<ContextData, BenTenError>>;
 
   /** Save context to disk */
-  saveContext(context: ContextData): Promise<Result<void, Ben10Error>>;
+  saveContext(context: ContextData): Promise<Result<void, BenTenError>>;
 
   /** Delete context file */
-  deleteContext(): Promise<Result<void, Ben10Error>>;
+  deleteContext(): Promise<Result<void, BenTenError>>;
 
   /** Get full path to context file */
   getContextPath(): string;
 
-  /** Get full path to .ben10 directory */
-  getBen10Dir(): string;
+  /** Get full path to .ben-ten directory */
+  getBenTenDir(): string;
+
+  /** Check if metadata exists for this project */
+  hasMetadata(): Promise<boolean>;
+
+  /** Load metadata from disk */
+  loadMetadata(): Promise<Result<ContextMetadata, BenTenError>>;
+
+  /** Save metadata to disk */
+  saveMetadata(metadata: ContextMetadata): Promise<Result<void, BenTenError>>;
 }
 
 export interface ContextServiceDeps {
@@ -59,6 +73,7 @@ export const createContextService = (
 
   const ben10Dir = `${projectDir}/${BEN10_DIR}`;
   const contextPath = `${ben10Dir}/${CONTEXT_FILE}`;
+  const metadataPath = `${ben10Dir}/${METADATA_FILE}`;
 
   const service: ContextService = {
     async hasContext() {
@@ -140,13 +155,13 @@ export const createContextService = (
         sessionId: context.sessionId,
       });
 
-      // Ensure .ben10 directory exists
+      // Ensure .ben-ten directory exists
       const mkdirResult = await fs.mkdir(ben10Dir, { recursive: true });
       if (!mkdirResult.ok) {
         return err(
           createError(
             ErrorCode.FS_WRITE_ERROR,
-            'Failed to create .ben10 directory',
+            'Failed to create .ben-ten directory',
             { path: ben10Dir, originalError: mkdirResult.error.message },
           ),
         );
@@ -201,8 +216,119 @@ export const createContextService = (
       return contextPath;
     },
 
-    getBen10Dir() {
+    getBenTenDir() {
       return ben10Dir;
+    },
+
+    async hasMetadata() {
+      return fs.exists(metadataPath);
+    },
+
+    async loadMetadata() {
+      logger.debug('Loading metadata', { path: metadataPath });
+
+      // Check if file exists
+      if (!(await fs.exists(metadataPath))) {
+        return err(
+          createError(ErrorCode.CONTEXT_NOT_FOUND, 'No metadata file found', {
+            path: metadataPath,
+          }),
+        );
+      }
+
+      // Read file
+      const readResult = await fs.readFile(metadataPath);
+      if (!readResult.ok) {
+        return err(
+          createError(
+            ErrorCode.CONTEXT_CORRUPTED,
+            'Failed to read metadata file',
+            { path: metadataPath, originalError: readResult.error.message },
+          ),
+        );
+      }
+
+      // Parse JSON
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(readResult.value);
+      } catch (e) {
+        logger.warn('Failed to parse metadata JSON', {
+          path: metadataPath,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        return err(
+          createError(
+            ErrorCode.CONTEXT_CORRUPTED,
+            'Metadata file contains invalid JSON',
+            { path: metadataPath },
+          ),
+        );
+      }
+
+      // Validate structure
+      const validateResult = parseContextMetadata(parsed);
+      if (!validateResult.ok) {
+        logger.warn('Metadata file has invalid structure', {
+          path: metadataPath,
+          errors: validateResult.error.details,
+        });
+        return err(
+          createError(
+            ErrorCode.CONTEXT_CORRUPTED,
+            'Metadata file has invalid structure',
+            {
+              path: metadataPath,
+              validationErrors: validateResult.error.details,
+            },
+          ),
+        );
+      }
+
+      logger.debug('Metadata loaded successfully', {
+        sessionId: validateResult.value.lastSessionId,
+      });
+
+      return ok(validateResult.value);
+    },
+
+    async saveMetadata(metadata) {
+      logger.debug('Saving metadata', {
+        path: metadataPath,
+        sessionId: metadata.lastSessionId,
+      });
+
+      // Ensure .ben-ten directory exists
+      const mkdirResult = await fs.mkdir(ben10Dir, { recursive: true });
+      if (!mkdirResult.ok) {
+        return err(
+          createError(
+            ErrorCode.FS_WRITE_ERROR,
+            'Failed to create .ben-ten directory',
+            { path: ben10Dir, originalError: mkdirResult.error.message },
+          ),
+        );
+      }
+
+      // Write metadata file
+      const content = JSON.stringify(metadata, null, 2);
+      const writeResult = await fs.writeFile(metadataPath, content);
+      if (!writeResult.ok) {
+        return err(
+          createError(
+            ErrorCode.FS_WRITE_ERROR,
+            'Failed to write metadata file',
+            { path: metadataPath, originalError: writeResult.error.message },
+          ),
+        );
+      }
+
+      logger.debug('Metadata saved successfully', {
+        path: metadataPath,
+        sessionId: metadata.lastSessionId,
+      });
+
+      return ok(undefined);
     },
   };
 

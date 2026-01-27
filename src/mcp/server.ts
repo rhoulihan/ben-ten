@@ -1,13 +1,18 @@
 import type { FileSystem } from '../adapters/fs/memory-fs.js';
-import type { ContextData } from '../core/types.js';
 import {
-  type Ben10Error,
+  CONTEXT_VERSION,
+  type ContextData,
+  type FileMetadata,
+} from '../core/types.js';
+import {
+  type BenTenError,
   ErrorCode,
   createError,
 } from '../infrastructure/errors.js';
 import type { Logger } from '../infrastructure/logger.js';
 import { type Result, err, ok } from '../infrastructure/result.js';
 import { createContextService } from '../services/context-service.js';
+import { createTranscriptService } from '../services/transcript-service.js';
 
 /** MCP Tool definition */
 export interface ToolDefinition {
@@ -63,10 +68,10 @@ export interface ClearResult {
 }
 
 /**
- * Ben10 MCP Server interface.
+ * Ben-Ten MCP Server interface.
  * Provides tools and resources for context management.
  */
-export interface Ben10Server {
+export interface BenTenServer {
   /** Get server information */
   getServerInfo(): ServerInfo;
 
@@ -77,43 +82,44 @@ export interface Ben10Server {
   callTool(
     name: string,
     args: Record<string, unknown>,
-  ): Promise<Result<unknown, Ben10Error>>;
+  ): Promise<Result<unknown, BenTenError>>;
 
   /** List available resources */
   listResources(): ResourceDefinition[];
 
   /** Read a resource by URI */
-  readResource(uri: string): Promise<Result<ResourceContent, Ben10Error>>;
+  readResource(uri: string): Promise<Result<ResourceContent, BenTenError>>;
 }
 
-export interface Ben10ServerDeps {
+export interface BenTenServerDeps {
   fs: FileSystem;
   logger: Logger;
   projectDir: string;
 }
 
 /**
- * Creates a Ben10 MCP server instance.
+ * Creates a Ben-Ten MCP server instance.
  *
  * @param deps - Dependencies including file system, logger, and project directory
- * @returns A Ben10Server instance
+ * @returns A BenTenServer instance
  */
-export const createBen10Server = (deps: Ben10ServerDeps): Ben10Server => {
+export const createBenTenServer = (deps: BenTenServerDeps): BenTenServer => {
   const { fs, logger, projectDir } = deps;
   const contextService = createContextService({ fs, logger, projectDir });
+  const transcriptService = createTranscriptService({ fs, logger });
 
   const tools: ToolDefinition[] = [
     {
-      name: 'ben10_status',
-      description: 'Get the status of Ben10 context for this project',
+      name: 'ben_ten_status',
+      description: 'Get the status of Ben-Ten context for this project',
       inputSchema: {
         type: 'object',
         properties: {},
       },
     },
     {
-      name: 'ben10_save',
-      description: 'Save context data to .ben10/context.json',
+      name: 'ben_ten_save',
+      description: 'Save context data to .ben-ten/context.json',
       inputSchema: {
         type: 'object',
         properties: {
@@ -140,15 +146,15 @@ export const createBen10Server = (deps: Ben10ServerDeps): Ben10Server => {
       },
     },
     {
-      name: 'ben10_load',
-      description: 'Load context data from .ben10/context.json',
+      name: 'ben_ten_load',
+      description: 'Load context data from .ben-ten/context.json',
       inputSchema: {
         type: 'object',
         properties: {},
       },
     },
     {
-      name: 'ben10_clear',
+      name: 'ben_ten_clear',
       description: 'Delete the context file',
       inputSchema: {
         type: 'object',
@@ -159,17 +165,17 @@ export const createBen10Server = (deps: Ben10ServerDeps): Ben10Server => {
 
   const resources: ResourceDefinition[] = [
     {
-      uri: 'ben10://context',
+      uri: 'ben-ten://context',
       name: 'Project Context',
       description: 'The persisted context for this project',
       mimeType: 'text/plain',
     },
   ];
 
-  const server: Ben10Server = {
+  const server: BenTenServer = {
     getServerInfo() {
       return {
-        name: 'ben10',
+        name: 'ben-ten',
         version: '1.0.0',
       };
     },
@@ -182,7 +188,7 @@ export const createBen10Server = (deps: Ben10ServerDeps): Ben10Server => {
       logger.debug('Calling tool', { name, args });
 
       switch (name) {
-        case 'ben10_status': {
+        case 'ben_ten_status': {
           const hasContext = await contextService.hasContext();
           const result: StatusResult = {
             hasContext,
@@ -202,7 +208,7 @@ export const createBen10Server = (deps: Ben10ServerDeps): Ben10Server => {
           return ok(result);
         }
 
-        case 'ben10_save': {
+        case 'ben_ten_save': {
           const sessionId = args.sessionId as string;
           const summary = args.summary as string;
           const keyFiles = args.keyFiles as string[] | undefined;
@@ -217,8 +223,9 @@ export const createBen10Server = (deps: Ben10ServerDeps): Ben10Server => {
             }
           }
 
+          // Build enriched v2.0.0 context
           const contextData: ContextData = {
-            version: '1.0.0',
+            version: CONTEXT_VERSION,
             createdAt,
             updatedAt: Date.now(),
             sessionId,
@@ -226,6 +233,48 @@ export const createBen10Server = (deps: Ben10ServerDeps): Ben10Server => {
             keyFiles,
             activeTasks,
           };
+
+          // Try to enrich context from transcript
+          if (await contextService.hasMetadata()) {
+            const metadataResult = await contextService.loadMetadata();
+            if (metadataResult.ok && metadataResult.value.transcriptPath) {
+              const transcriptPath = metadataResult.value.transcriptPath;
+              const transcriptResult =
+                await transcriptService.parseTranscript(transcriptPath);
+
+              if (transcriptResult.ok) {
+                const conversation = transcriptResult.value;
+                contextData.conversation = conversation;
+
+                // Extract file references
+                const extractedFiles =
+                  transcriptService.extractFileReferences(conversation);
+                if (extractedFiles.length > 0) {
+                  const now = Date.now();
+                  contextData.files = extractedFiles.map(
+                    (path): FileMetadata => ({
+                      path,
+                      lastAccessed: now,
+                      accessCount: 1,
+                    }),
+                  );
+                }
+
+                // Extract tool history
+                const toolCalls =
+                  transcriptService.extractToolCalls(conversation);
+                if (toolCalls.length > 0) {
+                  contextData.toolHistory = toolCalls;
+                }
+              } else {
+                // Log warning but continue without enrichment
+                logger.warn('Failed to parse transcript for enrichment', {
+                  path: transcriptPath,
+                  error: transcriptResult.error.message,
+                });
+              }
+            }
+          }
 
           const saveResult = await contextService.saveContext(contextData);
           if (!saveResult.ok) {
@@ -239,7 +288,7 @@ export const createBen10Server = (deps: Ben10ServerDeps): Ben10Server => {
           return ok(result);
         }
 
-        case 'ben10_load': {
+        case 'ben_ten_load': {
           const loadResult = await contextService.loadContext();
           if (!loadResult.ok) {
             return err(loadResult.error);
@@ -247,7 +296,7 @@ export const createBen10Server = (deps: Ben10ServerDeps): Ben10Server => {
           return ok(loadResult.value);
         }
 
-        case 'ben10_clear': {
+        case 'ben_ten_clear': {
           const deleteResult = await contextService.deleteContext();
           if (!deleteResult.ok) {
             return err(deleteResult.error);
@@ -274,7 +323,7 @@ export const createBen10Server = (deps: Ben10ServerDeps): Ben10Server => {
     async readResource(uri) {
       logger.debug('Reading resource', { uri });
 
-      if (uri === 'ben10://context') {
+      if (uri === 'ben-ten://context') {
         const hasContext = await contextService.hasContext();
 
         if (!hasContext) {
@@ -296,7 +345,7 @@ export const createBen10Server = (deps: Ben10ServerDeps): Ben10Server => {
 
         const ctx = loadResult.value;
         const contents = [
-          '# Ben10 Project Context',
+          '# Ben-Ten Project Context',
           '',
           `**Session ID:** ${ctx.sessionId}`,
           `**Created:** ${new Date(ctx.createdAt).toISOString()}`,

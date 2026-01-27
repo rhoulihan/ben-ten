@@ -1,5 +1,5 @@
 /**
- * Standard error codes for Ben10 operations.
+ * Standard error codes for Ben-Ten operations.
  * Organized by category for easy identification.
  */
 export const ErrorCode = {
@@ -38,27 +38,31 @@ export const ErrorCode = {
 
   // Validation errors
   VALIDATION_FAILED: 'VALIDATION_FAILED',
+
+  // Transcript errors
+  TRANSCRIPT_NOT_FOUND: 'TRANSCRIPT_NOT_FOUND',
+  TRANSCRIPT_PARSE_ERROR: 'TRANSCRIPT_PARSE_ERROR',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 
 /**
- * Structured error type for Ben10 operations.
+ * Structured error type for Ben-Ten operations.
  * Includes a machine-readable code and human-readable message.
  */
-export interface Ben10Error {
+export interface BenTenError {
   readonly code: ErrorCode;
   readonly message: string;
   readonly details?: Readonly<Record<string, unknown>>;
 }
 
 /**
- * Creates a frozen Ben10Error object.
+ * Creates a frozen BenTenError object.
  *
  * @param code - The error code from ErrorCode enum
  * @param message - Human-readable error description
  * @param details - Optional additional context about the error
- * @returns A frozen Ben10Error object
+ * @returns A frozen BenTenError object
  * @example
  * const error = createError(
  *   ErrorCode.FS_NOT_FOUND,
@@ -70,8 +74,8 @@ export const createError = (
   code: ErrorCode,
   message: string,
   details?: Record<string, unknown>,
-): Ben10Error => {
-  const error: Ben10Error = details
+): BenTenError => {
+  const error: BenTenError = details
     ? { code, message, details }
     : { code, message };
   return Object.freeze(error);

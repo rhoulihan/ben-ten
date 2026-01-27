@@ -1,6 +1,6 @@
-# Product Requirements Document: Ben10 Context Persistence
+# Product Requirements Document: Ben-Ten Context Persistence
 
-**Product Name:** Ben10 (named after Ben Tennyson's photographic memory)
+**Product Name:** Ben-Ten (named after Ben Tennyson's photographic memory)
 **Version:** 1.0
 **Author:** Product Management
 **Date:** January 2026
@@ -10,9 +10,9 @@
 
 ## Executive Summary
 
-Ben10—named after the cartoon hero Ben Tennyson, famous for his photographic memory—is a utility that automatically persists and restores the Claude Code context window state when sessions exit or start within a specific working directory. This enables developers to maintain conversational continuity across sessions, preserving the rich context that Claude Code accumulates during extended development work—including file references, architectural decisions, debugging history, and project-specific knowledge.
+Ben-Ten—named after the cartoon hero Ben Tennyson, famous for his photographic memory—is a utility that automatically persists and restores the Claude Code context window state when sessions exit or start within a specific working directory. This enables developers to maintain conversational continuity across sessions, preserving the rich context that Claude Code accumulates during extended development work—including file references, architectural decisions, debugging history, and project-specific knowledge.
 
-The tool addresses a critical pain point: when a Claude Code session ends (intentionally or due to crashes, timeouts, or system restarts), all accumulated context is lost, forcing developers to re-establish context from scratch. Ben10 eliminates this friction by treating context as a first-class, persistent asset tied to project directories.
+The tool addresses a critical pain point: when a Claude Code session ends (intentionally or due to crashes, timeouts, or system restarts), all accumulated context is lost, forcing developers to re-establish context from scratch. Ben-Ten eliminates this friction by treating context as a first-class, persistent asset tied to project directories.
 
 ---
 
@@ -182,7 +182,7 @@ The tool addresses a critical pain point: when a Claude Code session ends (inten
 │   │   └── .pinned          # List of pinned snapshot IDs
 │   └── exports/
 │       └── <export-name>.ctxpkg
-└── config.yaml              # Project-specific Ben10 settings
+└── config.yaml              # Project-specific Ben-Ten settings
 ```
 
 **FR-3.3: Storage Management**
@@ -554,7 +554,7 @@ interface CompactionSnapshotIndex {
 ```
 ┌──────────────────────────────────────────────┐
 │  Header (32 bytes)                           │
-│  ├── Magic: "Ben10" (4 bytes)                │
+│  ├── Magic: "Ben-Ten" (4 bytes)                │
 │  ├── Version: uint16                         │
 │  ├── Flags: uint16                           │
 │  ├── Segment Count: uint32                   │
@@ -584,7 +584,7 @@ interface CompactionSnapshotIndex {
 ### Workflow: Automatic Persistence (Happy Path)
 
 ```
-Developer                          Ben10                           Storage
+Developer                          Ben-Ten                           Storage
     │                                │                                │
     │  Start Claude Code in ./myproj │                                │
     │───────────────────────────────>│                                │
@@ -615,7 +615,7 @@ Developer                          Ben10                           Storage
 ### Workflow: Crash Recovery
 
 ```
-Developer                          Ben10                           Storage
+Developer                          Ben-Ten                           Storage
     │                                │                                │
     │  Working in session...         │                                │
     │───────────────────────────────>│                                │
@@ -641,7 +641,7 @@ Developer                          Ben10                           Storage
 ### Workflow: Multi-Project Context Switching
 
 ```
-Developer                          Ben10
+Developer                          Ben-Ten
     │                                │
     │  cd ~/projects/frontend        │
     │  claude                        │
@@ -665,7 +665,7 @@ Developer                          Ben10
 ### Workflow: Pre-Compaction Snapshot
 
 ```
-Developer                          Ben10                    Claude Code Engine
+Developer                          Ben-Ten                    Claude Code Engine
     │                                │                                │
     │  Long coding session...        │                                │
     │  Context grows to 180K tokens  │                                │
@@ -1161,7 +1161,7 @@ Choice [P/C/I/X]:
 
 ## Appendix A: Competitive Analysis
 
-| Feature | Ben10 | Cursor | Continue.dev | Codeium |
+| Feature | Ben-Ten | Cursor | Continue.dev | Codeium |
 |---------|------|--------|--------------|---------|
 | Auto-persist context | ✓ | Partial | ✗ | ✗ |
 | Directory-scoped | ✓ | ✗ | ✗ | ✗ |

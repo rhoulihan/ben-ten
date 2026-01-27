@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  type Ben10Error,
+  type BenTenError,
   ErrorCode,
   createError,
   isErrorCode,
@@ -34,6 +34,11 @@ describe('Error utilities', () => {
     it('has MCP error codes', () => {
       expect(ErrorCode.MCP_TOOL_ERROR).toBe('MCP_TOOL_ERROR');
       expect(ErrorCode.MCP_RESOURCE_ERROR).toBe('MCP_RESOURCE_ERROR');
+    });
+
+    it('has transcript error codes', () => {
+      expect(ErrorCode.TRANSCRIPT_NOT_FOUND).toBe('TRANSCRIPT_NOT_FOUND');
+      expect(ErrorCode.TRANSCRIPT_PARSE_ERROR).toBe('TRANSCRIPT_PARSE_ERROR');
     });
   });
 
@@ -84,9 +89,9 @@ describe('Error utilities', () => {
     });
   });
 
-  describe('Ben10Error type', () => {
+  describe('BenTenError type', () => {
     it('can be used with Result type', () => {
-      const error: Ben10Error = {
+      const error: BenTenError = {
         code: ErrorCode.CONTEXT_NOT_FOUND,
         message: 'No context found',
       };

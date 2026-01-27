@@ -2,7 +2,7 @@ import type { FileSystem } from '../adapters/fs/memory-fs.js';
 import { createNodeFs } from '../adapters/fs/node-fs.js';
 import { parseHookInput } from '../core/types.js';
 import {
-  type Ben10Error,
+  type BenTenError,
   ErrorCode,
   createError,
 } from '../infrastructure/errors.js';
@@ -35,7 +35,7 @@ export interface HookCommandOptions {
 export const runHookCommand = async (
   input: string,
   options: HookCommandOptions = {},
-): Promise<Result<HookCommandResult, Ben10Error>> => {
+): Promise<Result<HookCommandResult, BenTenError>> => {
   const fs = options.fs ?? createNodeFs();
   const logger = createLogger({ level: LogLevel.INFO });
 
@@ -81,7 +81,7 @@ export const runHookCommand = async (
     if (result.contextLoaded && result.context) {
       const ctx = result.context;
       output = [
-        '# Ben10 Context Loaded',
+        '# Ben-Ten Context Loaded',
         '',
         `**Previous Session:** ${ctx.sessionId}`,
         `**Last Updated:** ${new Date(ctx.updatedAt).toISOString()}`,

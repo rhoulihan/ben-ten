@@ -4,7 +4,7 @@ export default defineConfig({
   entry: {
     index: 'src/index.ts',
     'cli/index': 'src/cli/index.ts',
-    'bin/ben10': 'src/bin/ben10.ts',
+    'bin/ben-ten': 'src/bin/ben-ten.ts',
   },
   format: ['esm'],
   dts: true,

@@ -1,7 +1,7 @@
 export {
-  createBen10Server,
-  type Ben10Server,
-  type Ben10ServerDeps,
+  createBenTenServer,
+  type BenTenServer,
+  type BenTenServerDeps,
   type ToolDefinition,
   type ResourceDefinition,
   type ResourceContent,

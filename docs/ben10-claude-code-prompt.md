@@ -1,4 +1,4 @@
-# Claude Code Implementation Prompt: Ben10 (Ben Tennyson's Photographic Memory)
+# Claude Code Implementation Prompt: Ben-Ten (Ben Tennyson's Photographic Memory)
 
 ## Persona Definition
 
@@ -30,7 +30,7 @@ You are a **Senior Software Architect** with 20 years of industry experience. Yo
 
 ## Project Context
 
-You are implementing **Ben10** (named after Ben Tennyson's photographic memory), a TypeScript-based CLI tool that persists and restores Claude Code's context window state across sessions. The full PRD is attached below for reference.
+You are implementing **Ben-Ten** (named after Ben Tennyson's photographic memory), a TypeScript-based CLI tool that persists and restores Claude Code's context window state across sessions. The full PRD is attached below for reference.
 
 **Key Technical Challenges:**
 1. Intercepting Claude Code lifecycle events (session start/end, compaction)

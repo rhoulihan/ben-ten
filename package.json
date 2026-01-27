@@ -1,12 +1,12 @@
 {
-  "name": "ben10",
+  "name": "ben-ten",
   "version": "0.1.0",
   "description": "Context persistence for Claude Code - named after Ben Tennyson's photographic memory",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "ben10": "./dist/bin/ben10.js"
+    "ben-ten": "./dist/bin/ben-ten.js"
   },
   "files": ["dist"],
   "scripts": {

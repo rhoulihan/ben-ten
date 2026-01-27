@@ -9,6 +9,7 @@ import { isOk } from '../../../src/infrastructure/result.js';
 import {
   BEN10_DIR,
   CONTEXT_FILE,
+  METADATA_FILE,
 } from '../../../src/services/context-service.js';
 import {
   type HookHandler,
@@ -48,6 +49,32 @@ describe('HookHandler', () => {
         if (isOk(result)) {
           expect(result.value.contextLoaded).toBe(false);
           expect(result.value.context).toBeUndefined();
+        }
+      });
+
+      it('stores transcript path in metadata', async () => {
+        const transcriptPath = '/home/user/.claude/sessions/test.jsonl';
+        const input = createHookInput({
+          hook_event_name: 'SessionStart',
+          source: 'startup',
+          transcript_path: transcriptPath,
+        });
+
+        await handler.handleSessionStart(input);
+
+        // Verify metadata was written with transcript path
+        const metadataExists = await fs.exists(
+          `${projectDir}/${BEN10_DIR}/${METADATA_FILE}`,
+        );
+        expect(metadataExists).toBe(true);
+
+        const metadataContent = await fs.readFile(
+          `${projectDir}/${BEN10_DIR}/${METADATA_FILE}`,
+        );
+        if (metadataContent.ok) {
+          const metadata = JSON.parse(metadataContent.value);
+          expect(metadata.transcriptPath).toBe(transcriptPath);
+          expect(metadata.lastSessionId).toBe('test-session-123');
         }
       });
 

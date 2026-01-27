@@ -3,7 +3,7 @@ import {
   type FileSystem,
   createMemoryFs,
 } from '../../../src/adapters/fs/memory-fs.js';
-import type { ContextData } from '../../../src/core/types.js';
+import type { ContextData, ContextMetadata } from '../../../src/core/types.js';
 import { ErrorCode } from '../../../src/infrastructure/errors.js';
 import { LogLevel, createLogger } from '../../../src/infrastructure/logger.js';
 import { isErr, isOk } from '../../../src/infrastructure/result.js';
@@ -28,7 +28,7 @@ describe('ContextService', () => {
 
   describe('constants', () => {
     it('exports correct directory and file names', () => {
-      expect(BEN10_DIR).toBe('.ben10');
+      expect(BEN10_DIR).toBe('.ben-ten');
       expect(CONTEXT_FILE).toBe('context.json');
       expect(METADATA_FILE).toBe('metadata.json');
     });
@@ -239,11 +239,123 @@ describe('ContextService', () => {
     });
   });
 
-  describe('getBen10Dir', () => {
-    it('returns the full path to .ben10 directory', () => {
-      const path = service.getBen10Dir();
+  describe('getBenTenDir', () => {
+    it('returns the full path to .ben-ten directory', () => {
+      const path = service.getBenTenDir();
 
       expect(path).toBe(`${projectDir}/${BEN10_DIR}`);
+    });
+  });
+
+  describe('saveMetadata', () => {
+    it('saves metadata successfully', async () => {
+      const metadata: ContextMetadata = {
+        directory: projectDir,
+        directoryHash: 'abc123',
+        lastSessionId: 'session-1',
+        sessionCount: 1,
+        lastSavedAt: Date.now(),
+        transcriptPath: '/home/user/.claude/transcript.jsonl',
+      };
+
+      const result = await service.saveMetadata(metadata);
+
+      expect(isOk(result)).toBe(true);
+
+      // Verify file was written
+      const fileExists = await fs.exists(
+        `${projectDir}/${BEN10_DIR}/${METADATA_FILE}`,
+      );
+      expect(fileExists).toBe(true);
+    });
+
+    it('creates .ben-ten directory if needed', async () => {
+      const metadata: ContextMetadata = {
+        directory: projectDir,
+        directoryHash: 'abc123',
+        lastSessionId: 'session-1',
+        sessionCount: 1,
+        lastSavedAt: Date.now(),
+      };
+
+      await service.saveMetadata(metadata);
+
+      const dirExists = await fs.exists(`${projectDir}/${BEN10_DIR}`);
+      expect(dirExists).toBe(true);
+    });
+  });
+
+  describe('loadMetadata', () => {
+    it('loads existing metadata successfully', async () => {
+      const metadata: ContextMetadata = {
+        directory: projectDir,
+        directoryHash: 'abc123',
+        lastSessionId: 'session-1',
+        sessionCount: 5,
+        lastSavedAt: 1234567890,
+        transcriptPath: '/path/to/transcript.jsonl',
+      };
+      await fs.mkdir(`${projectDir}/${BEN10_DIR}`, { recursive: true });
+      await fs.writeFile(
+        `${projectDir}/${BEN10_DIR}/${METADATA_FILE}`,
+        JSON.stringify(metadata),
+      );
+
+      const result = await service.loadMetadata();
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.lastSessionId).toBe('session-1');
+        expect(result.value.sessionCount).toBe(5);
+        expect(result.value.transcriptPath).toBe('/path/to/transcript.jsonl');
+      }
+    });
+
+    it('returns error when no metadata exists', async () => {
+      const result = await service.loadMetadata();
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.code).toBe(ErrorCode.CONTEXT_NOT_FOUND);
+      }
+    });
+
+    it('returns error for invalid metadata', async () => {
+      await fs.mkdir(`${projectDir}/${BEN10_DIR}`, { recursive: true });
+      await fs.writeFile(
+        `${projectDir}/${BEN10_DIR}/${METADATA_FILE}`,
+        JSON.stringify({ invalid: 'structure' }),
+      );
+
+      const result = await service.loadMetadata();
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.code).toBe(ErrorCode.CONTEXT_CORRUPTED);
+      }
+    });
+  });
+
+  describe('hasMetadata', () => {
+    it('returns false when no metadata exists', async () => {
+      const result = await service.hasMetadata();
+
+      expect(result).toBe(false);
+    });
+
+    it('returns true when metadata file exists', async () => {
+      const metadata: ContextMetadata = {
+        directory: projectDir,
+        directoryHash: 'abc123',
+        lastSessionId: 'session-1',
+        sessionCount: 1,
+        lastSavedAt: Date.now(),
+      };
+      await service.saveMetadata(metadata);
+
+      const result = await service.hasMetadata();
+
+      expect(result).toBe(true);
     });
   });
 });

@@ -16,7 +16,7 @@ export {
   ErrorCode,
   createError,
   isErrorCode,
-  type Ben10Error,
+  type BenTenError,
 } from './infrastructure/errors.js';
 
 export {
@@ -69,10 +69,10 @@ export {
 
 // MCP Server
 export {
-  createBen10Server,
+  createBenTenServer,
   startMcpServer,
-  type Ben10Server,
-  type Ben10ServerDeps,
+  type BenTenServer,
+  type BenTenServerDeps,
   type McpTransportDeps,
   type ToolDefinition,
   type ResourceDefinition,

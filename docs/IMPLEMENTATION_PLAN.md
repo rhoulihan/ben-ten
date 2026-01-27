@@ -1,4 +1,4 @@
-# Ben10 Implementation Plan
+# Ben-Ten Implementation Plan
 
 **Version:** 2.0
 **Date:** January 2026
@@ -25,7 +25,7 @@
 
 ## 1. Architecture Overview
 
-Ben10 uses an **MCP-first hybrid architecture** combining:
+Ben-Ten uses an **MCP-first hybrid architecture** combining:
 
 1. **MCP Server** — Long-running service exposing tools and resources
 2. **Lifecycle Hooks** — Claude Code hooks for automatic persistence events
@@ -39,18 +39,18 @@ Ben10 uses an **MCP-first hybrid architecture** combining:
 │  Lifecycle Hooks                    MCP Protocol (stdio)            │
 │  ┌─────────────────────┐           ┌──────────────────────────────┐│
 │  │ SessionStart        │           │ Tools:                       ││
-│  │  → ben10 hook start │──────────▶│  • ben10_save                ││
-│  │                     │           │  • ben10_restore             ││
-│  │ PreCompact          │           │  • ben10_status              ││
-│  │  → ben10 hook compact──────────▶│  • ben10_snapshot_list       ││
-│  │                     │           │  • ben10_snapshot_restore    ││
-│  │ SessionEnd          │           │  • ben10_diff                ││
-│  │  → ben10 hook end   │──────────▶│  • ben10_clear               ││
+│  │  → ben-ten hook start │──────────▶│  • ben-ten_save                ││
+│  │                     │           │  • ben-ten_restore             ││
+│  │ PreCompact          │           │  • ben-ten_status              ││
+│  │  → ben-ten hook compact──────────▶│  • ben-ten_snapshot_list       ││
+│  │                     │           │  • ben-ten_snapshot_restore    ││
+│  │ SessionEnd          │           │  • ben-ten_diff                ││
+│  │  → ben-ten hook end   │──────────▶│  • ben-ten_clear               ││
 │  └─────────────────────┘           │                              ││
 │                                    │ Resources:                   ││
-│                                    │  • ben10://status            ││
-│                                    │  • ben10://context           ││
-│                                    │  • ben10://snapshots         ││
+│                                    │  • ben-ten://status            ││
+│                                    │  • ben-ten://context           ││
+│                                    │  • ben-ten://snapshots         ││
 │                                    └──────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────────┘
                                     │
@@ -58,7 +58,7 @@ Ben10 uses an **MCP-first hybrid architecture** combining:
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      Ben10 MCP Server                                │
+│                      Ben-Ten MCP Server                                │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
 │  │  Context    │  │  Snapshot   │  │    File     │                 │
 │  │  Manager    │  │  Service    │  │   Watcher   │                 │
@@ -73,12 +73,12 @@ Ben10 uses an **MCP-first hybrid architecture** combining:
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  .ben10/                                                             │
+│  .ben-ten/                                                             │
 │    ├── current.ctx              # Active context                    │
 │    ├── current.ctx.meta         # Metadata (JSON)                   │
 │    ├── checkpoints/             # Crash recovery                    │
 │    ├── compaction-snapshots/    # Pre-compaction archives           │
-│    └── config.yaml              # Project-specific Ben10 settings   │
+│    └── config.yaml              # Project-specific Ben-Ten settings   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -88,9 +88,9 @@ Ben10 uses an **MCP-first hybrid architecture** combining:
 |----------|--------|-----------|
 | Primary interface | MCP Server | Persistent state, Claude can invoke tools directly |
 | Lifecycle events | Claude Code Hooks | Automatic save/restore without user intervention |
-| Hook → Server communication | CLI shim | Hooks call `ben10 hook <event>` which signals server |
+| Hook → Server communication | CLI shim | Hooks call `ben-ten hook <event>` which signals server |
 | Transport | stdio | Standard MCP transport, no port management |
-| State location | Per-project `.ben10/` | Directory-scoped, Ben10's own namespace |
+| State location | Per-project `.ben-ten/` | Directory-scoped, Ben-Ten's own namespace |
 
 ### Configuration Files
 
@@ -98,8 +98,8 @@ Ben10 uses an **MCP-first hybrid architecture** combining:
 ```json
 {
   "mcpServers": {
-    "ben10": {
-      "command": "ben10",
+    "ben-ten": {
+      "command": "ben-ten",
       "args": ["serve"],
       "env": {
         "BEN10_LOG_LEVEL": "info"
@@ -116,19 +116,19 @@ Ben10 uses an **MCP-first hybrid architecture** combining:
     "SessionStart": [{
       "hooks": [{
         "type": "command",
-        "command": "ben10 hook session-start"
+        "command": "ben-ten hook session-start"
       }]
     }],
     "PreCompact": [{
       "hooks": [{
         "type": "command",
-        "command": "ben10 hook pre-compact"
+        "command": "ben-ten hook pre-compact"
       }]
     }],
     "SessionEnd": [{
       "hooks": [{
         "type": "command",
-        "command": "ben10 hook session-end"
+        "command": "ben-ten hook session-end"
       }]
     }]
   }
@@ -140,7 +140,7 @@ Ben10 uses an **MCP-first hybrid architecture** combining:
 ## 2. Project Structure
 
 ```
-ben10/
+ben-ten/
 ├── src/
 │   ├── core/                        # Domain logic (pure, no I/O)
 │   │   ├── context/
@@ -165,18 +165,18 @@ ben10/
 │   ├── mcp/                         # MCP Server implementation
 │   │   ├── server.ts                # McpServer setup & lifecycle
 │   │   ├── tools/                   # MCP Tool handlers
-│   │   │   ├── save.ts              # ben10_save tool
-│   │   │   ├── restore.ts           # ben10_restore tool
-│   │   │   ├── status.ts            # ben10_status tool
-│   │   │   ├── diff.ts              # ben10_diff tool
-│   │   │   ├── clear.ts             # ben10_clear tool
-│   │   │   ├── snapshot-list.ts     # ben10_snapshot_list tool
-│   │   │   ├── snapshot-restore.ts  # ben10_snapshot_restore tool
+│   │   │   ├── save.ts              # ben-ten_save tool
+│   │   │   ├── restore.ts           # ben-ten_restore tool
+│   │   │   ├── status.ts            # ben-ten_status tool
+│   │   │   ├── diff.ts              # ben-ten_diff tool
+│   │   │   ├── clear.ts             # ben-ten_clear tool
+│   │   │   ├── snapshot-list.ts     # ben-ten_snapshot_list tool
+│   │   │   ├── snapshot-restore.ts  # ben-ten_snapshot_restore tool
 │   │   │   └── index.ts             # Tool registration
 │   │   ├── resources/               # MCP Resource handlers
-│   │   │   ├── status.ts            # ben10://status resource
-│   │   │   ├── context.ts           # ben10://context resource
-│   │   │   ├── snapshots.ts         # ben10://snapshots/* resources
+│   │   │   ├── status.ts            # ben-ten://status resource
+│   │   │   ├── context.ts           # ben-ten://context resource
+│   │   │   ├── snapshots.ts         # ben-ten://snapshots/* resources
 │   │   │   └── index.ts             # Resource registration
 │   │   └── hooks/                   # Hook event handlers
 │   │       ├── session-start.ts     # SessionStart hook handler
@@ -199,10 +199,10 @@ ben10/
 │   │
 │   ├── cli/                         # Command-line interface
 │   │   ├── commands/
-│   │   │   ├── serve.ts             # ben10 serve (start MCP server)
-│   │   │   ├── hook.ts              # ben10 hook <event> (hook shim)
-│   │   │   ├── status.ts            # ben10 status (standalone)
-│   │   │   ├── init.ts              # ben10 init (setup project)
+│   │   │   ├── serve.ts             # ben-ten serve (start MCP server)
+│   │   │   ├── hook.ts              # ben-ten hook <event> (hook shim)
+│   │   │   ├── status.ts            # ben-ten status (standalone)
+│   │   │   ├── init.ts              # ben-ten init (setup project)
 │   │   │   └── index.ts             # Command registration
 │   │   ├── ui/
 │   │   │   ├── output.ts            # Formatted output helpers
@@ -257,7 +257,7 @@ ben10/
 
 ### 3.1 MCP Server Module (NEW - Critical Path)
 
-**Purpose:** Implement MCP protocol server exposing Ben10 functionality to Claude Code.
+**Purpose:** Implement MCP protocol server exposing Ben-Ten functionality to Claude Code.
 
 **Public Interface:**
 ```typescript
@@ -265,14 +265,14 @@ ben10/
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
-export interface Ben10ServerDeps {
+export interface BenTenServerDeps {
   contextManager: ContextManager;
   snapshotService: SnapshotService;
-  config: Ben10Config;
+  config: BenTenConfig;
   logger: Logger;
 }
 
-export function createBen10Server(deps: Ben10ServerDeps): McpServer;
+export function createBenTenServer(deps: BenTenServerDeps): McpServer;
 export async function startServer(server: McpServer): Promise<void>;
 ```
 
@@ -280,23 +280,23 @@ export async function startServer(server: McpServer): Promise<void>;
 
 | Tool | Description | Input Schema |
 |------|-------------|--------------|
-| `ben10_save` | Save current context | `{ name?: string }` |
-| `ben10_restore` | Restore context | `{ name?: string, mode?: RestoreMode }` |
-| `ben10_status` | Get context status | `{}` |
-| `ben10_diff` | Show filesystem changes | `{}` |
-| `ben10_clear` | Clear context | `{ force?: boolean }` |
-| `ben10_snapshot_list` | List compaction snapshots | `{ verbose?: boolean }` |
-| `ben10_snapshot_restore` | Restore from snapshot | `{ id: string }` |
-| `ben10_checkpoint` | Create manual checkpoint | `{}` |
+| `ben-ten_save` | Save current context | `{ name?: string }` |
+| `ben-ten_restore` | Restore context | `{ name?: string, mode?: RestoreMode }` |
+| `ben-ten_status` | Get context status | `{}` |
+| `ben-ten_diff` | Show filesystem changes | `{}` |
+| `ben-ten_clear` | Clear context | `{ force?: boolean }` |
+| `ben-ten_snapshot_list` | List compaction snapshots | `{ verbose?: boolean }` |
+| `ben-ten_snapshot_restore` | Restore from snapshot | `{ id: string }` |
+| `ben-ten_checkpoint` | Create manual checkpoint | `{}` |
 
 **MCP Resources Exposed:**
 
 | URI | Description | MIME Type |
 |-----|-------------|-----------|
-| `ben10://status` | Current context status | `application/json` |
-| `ben10://context` | Context summary (redacted) | `application/json` |
-| `ben10://snapshots` | Snapshot index | `application/json` |
-| `ben10://snapshots/{id}` | Individual snapshot metadata | `application/json` |
+| `ben-ten://status` | Current context status | `application/json` |
+| `ben-ten://context` | Context summary (redacted) | `application/json` |
+| `ben-ten://snapshots` | Snapshot index | `application/json` |
+| `ben-ten://snapshots/{id}` | Individual snapshot metadata | `application/json` |
 
 **Dependencies:**
 - External: `@modelcontextprotocol/sdk`, `zod`
@@ -347,10 +347,10 @@ export const handlers: Record<string, HookHandler> = {
 
 | Event | Source | Action |
 |-------|--------|--------|
-| `SessionStart` | `startup` | Load `.ben10/context.json` if exists, make available via MCP resource |
-| `SessionStart` | `compact` | Read freshly-compacted transcript, save to `.ben10/context.json` |
+| `SessionStart` | `startup` | Load `.ben-ten/context.json` if exists, make available via MCP resource |
+| `SessionStart` | `compact` | Read freshly-compacted transcript, save to `.ben-ten/context.json` |
 | `SessionStart` | `resume` | No action (session continuing) |
-| `SessionEnd` | - | Read current transcript, save to `.ben10/context.json` |
+| `SessionEnd` | - | Read current transcript, save to `.ben-ten/context.json` |
 
 **Key Insight:** The SessionStart hook with `source: "compact"` fires immediately AFTER compaction completes, giving us access to the compacted transcript. This is effectively a PostCompact hook.
 
@@ -451,12 +451,12 @@ export interface ContextManager {
 **Commands:**
 
 ```
-ben10 <command> [options]
+ben-ten <command> [options]
 
 Commands:
   serve                  Start MCP server (called by Claude Code)
   hook <event>           Handle lifecycle hook event
-  init                   Initialize Ben10 in current project
+  init                   Initialize Ben-Ten in current project
   status                 Show context status (standalone)
   version                Show version
 
@@ -468,9 +468,9 @@ Hook Events:
 
 **Key Implementation Notes:**
 
-1. **`ben10 serve`** — Starts MCP server on stdio. NEVER use console.log (corrupts JSON-RPC).
-2. **`ben10 hook <event>`** — Reads hook input from stdin, signals running server or operates standalone.
-3. **`ben10 init`** — Creates `.mcp.json` and `.claude/settings.json` with proper configuration.
+1. **`ben-ten serve`** — Starts MCP server on stdio. NEVER use console.log (corrupts JSON-RPC).
+2. **`ben-ten hook <event>`** — Reads hook input from stdin, signals running server or operates standalone.
+3. **`ben-ten init`** — Creates `.mcp.json` and `.claude/settings.json` with proper configuration.
 
 ---
 
@@ -650,7 +650,7 @@ export interface CompactionSnapshotSummary {
 ### 4.4 Configuration Types
 
 ```typescript
-export interface Ben10Config {
+export interface BenTenConfig {
   context: ContextConfig;
   mcp: McpConfig;
 }
@@ -680,12 +680,12 @@ export interface CompactionSnapshotConfig {
   compressionLevel: number;
 }
 
-export const DEFAULT_CONFIG: Ben10Config = {
+export const DEFAULT_CONFIG: BenTenConfig = {
   context: {
     autoSave: true,
     autoRestore: true,
     checkpointInterval: 10,
-    storageLocation: '.ben10',
+    storageLocation: '.ben-ten',
     maxStorageMb: 100,
     historyRetentionCount: 5,
     checkpointRetentionDays: 7,
@@ -744,7 +744,7 @@ export enum ErrorCode {
   HOOK_EXECUTION_FAILED = 'HOOK_EXECUTION_FAILED',
 }
 
-export interface Ben10Error {
+export interface BenTenError {
   code: ErrorCode;
   message: string;
   details?: Record<string, unknown>;
@@ -770,7 +770,7 @@ export interface Ben10Error {
 | 1.5 | Zod schemas for all types | 3 | 1.4 | Validation + MCP input schemas |
 | 1.6 | FileSystem adapter (node + memory) | 3 | 1.2 | |
 | 1.7 | MCP server skeleton | 5 | 1.3, 1.5 | McpServer + StdioTransport |
-| 1.8 | MCP tool: ben10_status | 3 | 1.7 | First tool, validates setup |
+| 1.8 | MCP tool: ben-ten_status | 3 | 1.7 | First tool, validates setup |
 
 **Sprint 2: Persistence + Hooks (Week 3-4)**
 
@@ -781,21 +781,21 @@ export interface Ben10Error {
 | 2.3 | Checksum implementation | 2 | 2.1 | |
 | 2.4 | Context save to disk | 5 | 1.6, 2.2, 2.3 | |
 | 2.5 | Context load from disk | 5 | 2.4 | |
-| 2.6 | MCP tool: ben10_save | 3 | 2.4, 1.7 | |
-| 2.7 | MCP tool: ben10_restore | 3 | 2.5, 1.7 | |
+| 2.6 | MCP tool: ben-ten_save | 3 | 2.4, 1.7 | |
+| 2.7 | MCP tool: ben-ten_restore | 3 | 2.5, 1.7 | |
 | 2.8 | Hook handler: session-start (startup/compact/resume) | 5 | 2.5 | Reads transcript on compact |
 | 2.8b | Hook handler: session-end | 3 | 2.4 | Saves transcript context |
-| 2.9 | CLI: ben10 serve | 3 | 1.7 | |
-| 2.10 | CLI: ben10 hook | 3 | 2.8 | |
-| 2.11 | CLI: ben10 init | 3 | 1.6 | Generate .mcp.json + hooks |
+| 2.9 | CLI: ben-ten serve | 3 | 1.7 | |
+| 2.10 | CLI: ben-ten hook | 3 | 2.8 | |
+| 2.11 | CLI: ben-ten init | 3 | 1.6 | Generate .mcp.json + hooks |
 
 **Definition of Done - Phase 1:**
-- [ ] `ben10 serve` starts MCP server on stdio
-- [ ] `ben10_status` tool returns context status
-- [ ] `ben10_save` / `ben10_restore` tools work
-- [ ] `ben10 hook session-start` restores context
-- [ ] `ben10 hook session-end` saves context
-- [ ] `ben10 init` creates proper configuration files
+- [ ] `ben-ten serve` starts MCP server on stdio
+- [ ] `ben-ten_status` tool returns context status
+- [ ] `ben-ten_save` / `ben-ten_restore` tools work
+- [ ] `ben-ten hook session-start` restores context
+- [ ] `ben-ten hook session-end` saves context
+- [ ] `ben-ten init` creates proper configuration files
 - [ ] 90% test coverage on core + MCP modules
 - [ ] CI pipeline running
 
@@ -812,11 +812,11 @@ export interface Ben10Error {
 | 3.1 | Checkpoint service | 5 | 2.4 | |
 | 3.2 | Rolling checkpoint management | 3 | 3.1 | |
 | 3.3 | Crash recovery detection | 3 | 3.2 | |
-| 3.4 | MCP resource: ben10://status | 3 | 1.7 | |
-| 3.5 | MCP resource: ben10://context | 3 | 1.7 | Redacted summary |
-| 3.6 | MCP tool: ben10_diff | 5 | 1.7 | |
-| 3.7 | MCP tool: ben10_clear | 3 | 1.7 | |
-| 3.8 | MCP tool: ben10_checkpoint | 3 | 3.1 | Manual checkpoint |
+| 3.4 | MCP resource: ben-ten://status | 3 | 1.7 | |
+| 3.5 | MCP resource: ben-ten://context | 3 | 1.7 | Redacted summary |
+| 3.6 | MCP tool: ben-ten_diff | 5 | 1.7 | |
+| 3.7 | MCP tool: ben-ten_clear | 3 | 1.7 | |
+| 3.8 | MCP tool: ben-ten_checkpoint | 3 | 3.1 | Manual checkpoint |
 
 **Sprint 4: Compaction Snapshots (Week 7-8)**
 
@@ -827,9 +827,9 @@ export interface Ben10Error {
 | 4.3 | Snapshot index management | 5 | 4.2 | |
 | 4.4 | Retention policy pruning | 3 | 4.3 | |
 | 4.5 | Hook handler: pre-compact | 5 | 4.2 | |
-| 4.6 | MCP tool: ben10_snapshot_list | 3 | 4.3 | |
-| 4.7 | MCP tool: ben10_snapshot_restore | 5 | 4.2 | |
-| 4.8 | MCP resource: ben10://snapshots | 3 | 4.3 | |
+| 4.6 | MCP tool: ben-ten_snapshot_list | 3 | 4.3 | |
+| 4.7 | MCP tool: ben-ten_snapshot_restore | 5 | 4.2 | |
+| 4.8 | MCP resource: ben-ten://snapshots | 3 | 4.3 | |
 | 4.9 | Config loader with hierarchy | 5 | 1.6 | |
 
 **Definition of Done - Phase 2:**
@@ -889,16 +889,16 @@ graph TD
     B --> D[1.5 Zod Schemas]
     C --> E[1.7 MCP Server Skeleton]
     D --> E
-    E --> F[1.8 ben10_status Tool]
+    E --> F[1.8 ben-ten_status Tool]
 
     B --> G[2.1 Serializer]
     G --> H[2.2 LZ4 Compression]
     H --> I[2.4 Save to Disk]
     I --> J[2.5 Load from Disk]
 
-    F --> K[2.6 ben10_save Tool]
+    F --> K[2.6 ben-ten_save Tool]
     I --> K
-    F --> L[2.7 ben10_restore Tool]
+    F --> L[2.7 ben-ten_restore Tool]
     J --> L
 
     K --> M[2.8 Hook Handlers]
@@ -936,7 +936,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { handleStatus } from '../../../../src/mcp/tools/status';
 import { createMockContextManager } from '../../../mocks';
 
-describe('ben10_status tool', () => {
+describe('ben-ten_status tool', () => {
   it('returns context status when context exists', async () => {
     const manager = createMockContextManager({
       state: createTestContext(),
@@ -1036,12 +1036,12 @@ describe('MCP Server Integration', () => {
   it('lists available tools', async () => {
     const tools = await client.listTools();
 
-    expect(tools.tools.map(t => t.name)).toContain('ben10_status');
-    expect(tools.tools.map(t => t.name)).toContain('ben10_save');
+    expect(tools.tools.map(t => t.name)).toContain('ben-ten_status');
+    expect(tools.tools.map(t => t.name)).toContain('ben-ten_save');
   });
 
-  it('executes ben10_status tool', async () => {
-    const result = await client.callTool({ name: 'ben10_status', arguments: {} });
+  it('executes ben-ten_status tool', async () => {
+    const result = await client.callTool({ name: 'ben-ten_status', arguments: {} });
 
     expect(result.content[0].type).toBe('text');
     const data = JSON.parse(result.content[0].text);
@@ -1057,8 +1057,8 @@ describe('MCP Server Integration', () => {
 | Full lifecycle | init → session-start → work → session-end → session-start | Context restored correctly |
 | Compaction | Long session → pre-compact hook → verify snapshot | Snapshot created, indexed |
 | Crash recovery | Save → kill process → restart → restore | Checkpoint offered |
-| MCP tool access | Claude calls ben10_status | Returns valid JSON |
-| Resource access | @ben10://status in conversation | Resource content returned |
+| MCP tool access | Claude calls ben-ten_status | Returns valid JSON |
+| Resource access | @ben-ten://status in conversation | Resource content returned |
 
 ---
 
@@ -1188,7 +1188,7 @@ jobs:
 The MCP server is started by Claude Code and runs for the session duration. Hooks are separate processes that execute and exit. Communication approach:
 
 1. **Option A: File-based signaling** — Hook writes to `.claude/context/.hook-event`, server watches
-2. **Option B: CLI calls server endpoint** — `ben10 hook` connects to running server via IPC
+2. **Option B: CLI calls server endpoint** — `ben-ten hook` connects to running server via IPC
 3. **Option C: Independent operation** — Hooks operate on files directly, server reloads
 
 **Selected: Option C (Independent operation)**
@@ -1249,23 +1249,23 @@ The MCP server is started by Claude Code and runs for the session duration. Hook
 
 ## Appendix A: Installation & Setup
 
-After `npm install -g ben10`:
+After `npm install -g ben-ten`:
 
 ```bash
 # In your project directory
-ben10 init
+ben-ten init
 
 # This creates:
 # - .mcp.json (MCP server configuration)
 # - .claude/settings.json (hooks configuration)
-# - .ben10/ (storage directory)
-# - .ben10/config.yaml (project-specific settings)
-# - Updates .gitignore to include .ben10/
+# - .ben-ten/ (storage directory)
+# - .ben-ten/config.yaml (project-specific settings)
+# - Updates .gitignore to include .ben-ten/
 
 # Claude Code will now automatically:
-# 1. Start ben10 MCP server on session start
-# 2. Call ben10 hooks on lifecycle events
-# 3. Expose ben10_* tools for manual operations
+# 1. Start ben-ten MCP server on session start
+# 2. Call ben-ten hooks on lifecycle events
+# 3. Expose ben-ten_* tools for manual operations
 ```
 
 ---

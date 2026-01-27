@@ -1,8 +1,8 @@
-# Ben10
+# Ben-Ten
 
 Context persistence for Claude Code. Named after Ben Tennyson's photographic memory.
 
-Ben10 automatically saves and restores Claude Code's context window state across sessions, eliminating the "cold start" problem where developers spend 5-15 minutes re-establishing context.
+Ben-Ten automatically saves and restores Claude Code's context window state across sessions, eliminating the "cold start" problem where developers spend 5-15 minutes re-establishing context.
 
 ## Tech Stack
 
@@ -183,13 +183,13 @@ interface CompactionSnapshot {
 ## Storage Layout
 
 ```
-.ben10/
+.ben-ten/
 ├── current.ctx               # Active context (MessagePack + LZ4)
 ├── current.ctx.meta          # Metadata (JSON)
 ├── checkpoints/              # Rolling crash recovery
 ├── history/                  # Archived sessions (gzip)
 ├── compaction-snapshots/     # Pre-compaction saves (ZSTD)
-└── config.yaml               # Project-specific Ben10 settings
+└── config.yaml               # Project-specific Ben-Ten settings
 ```
 
 ## Do Not

@@ -7,79 +7,79 @@ import type { ContextData } from '../../../src/core/types.js';
 import { LogLevel, createLogger } from '../../../src/infrastructure/logger.js';
 import { isErr, isOk } from '../../../src/infrastructure/result.js';
 import {
-  type Ben10Server,
-  createBen10Server,
+  type BenTenServer,
+  createBenTenServer,
 } from '../../../src/mcp/server.js';
 import {
   BEN10_DIR,
   CONTEXT_FILE,
 } from '../../../src/services/context-service.js';
 
-describe('Ben10Server', () => {
+describe('BenTenServer', () => {
   let fs: FileSystem;
-  let server: Ben10Server;
+  let server: BenTenServer;
   const projectDir = '/project';
 
   beforeEach(() => {
     fs = createMemoryFs();
     const logger = createLogger({ level: LogLevel.ERROR });
-    server = createBen10Server({ fs, logger, projectDir });
+    server = createBenTenServer({ fs, logger, projectDir });
   });
 
   describe('getServerInfo', () => {
     it('returns server name and version', () => {
       const info = server.getServerInfo();
 
-      expect(info.name).toBe('ben10');
+      expect(info.name).toBe('ben-ten');
       expect(info.version).toBe('1.0.0');
     });
   });
 
   describe('listTools', () => {
-    it('includes ben10_status tool', () => {
+    it('includes ben_ten_status tool', () => {
       const tools = server.listTools();
 
       expect(tools).toContainEqual(
         expect.objectContaining({
-          name: 'ben10_status',
+          name: 'ben_ten_status',
         }),
       );
     });
 
-    it('includes ben10_save tool', () => {
+    it('includes ben_ten_save tool', () => {
       const tools = server.listTools();
 
       expect(tools).toContainEqual(
         expect.objectContaining({
-          name: 'ben10_save',
+          name: 'ben_ten_save',
         }),
       );
     });
 
-    it('includes ben10_load tool', () => {
+    it('includes ben_ten_load tool', () => {
       const tools = server.listTools();
 
       expect(tools).toContainEqual(
         expect.objectContaining({
-          name: 'ben10_load',
+          name: 'ben_ten_load',
         }),
       );
     });
 
-    it('includes ben10_clear tool', () => {
+    it('includes ben_ten_clear tool', () => {
       const tools = server.listTools();
 
       expect(tools).toContainEqual(
         expect.objectContaining({
-          name: 'ben10_clear',
+          name: 'ben_ten_clear',
         }),
       );
     });
   });
 
-  describe('callTool - ben10_status', () => {
+  describe('callTool - ben_ten_status', () => {
     it('returns status when no context exists', async () => {
-      const result = await server.callTool('ben10_status', {});
+      const result = await server.callTool('ben_ten_status', {});
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -101,7 +101,7 @@ describe('Ben10Server', () => {
         JSON.stringify(contextData),
       );
 
-      const result = await server.callTool('ben10_status', {});
+      const result = await server.callTool('ben_ten_status', {});
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -112,9 +112,9 @@ describe('Ben10Server', () => {
     });
   });
 
-  describe('callTool - ben10_save', () => {
+  describe('callTool - ben_ten_save', () => {
     it('saves context with provided summary', async () => {
-      const result = await server.callTool('ben10_save', {
+      const result = await server.callTool('ben_ten_save', {
         sessionId: 'new-session',
         summary: 'This is a new summary to save',
       });
@@ -144,7 +144,7 @@ describe('Ben10Server', () => {
         JSON.stringify(existingContext),
       );
 
-      await server.callTool('ben10_save', {
+      await server.callTool('ben_ten_save', {
         sessionId: 'updated-session',
         summary: 'Updated summary',
       });
@@ -160,9 +160,9 @@ describe('Ben10Server', () => {
     });
   });
 
-  describe('callTool - ben10_load', () => {
+  describe('callTool - ben_ten_load', () => {
     it('returns error when no context exists', async () => {
-      const result = await server.callTool('ben10_load', {});
+      const result = await server.callTool('ben_ten_load', {});
 
       expect(isErr(result)).toBe(true);
     });
@@ -181,7 +181,7 @@ describe('Ben10Server', () => {
         JSON.stringify(contextData),
       );
 
-      const result = await server.callTool('ben10_load', {});
+      const result = await server.callTool('ben_ten_load', {});
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -192,9 +192,9 @@ describe('Ben10Server', () => {
     });
   });
 
-  describe('callTool - ben10_clear', () => {
+  describe('callTool - ben_ten_clear', () => {
     it('succeeds when no context exists', async () => {
-      const result = await server.callTool('ben10_clear', {});
+      const result = await server.callTool('ben_ten_clear', {});
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -215,7 +215,7 @@ describe('Ben10Server', () => {
         JSON.stringify(contextData),
       );
 
-      const result = await server.callTool('ben10_clear', {});
+      const result = await server.callTool('ben_ten_clear', {});
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -243,7 +243,7 @@ describe('Ben10Server', () => {
 
       expect(resources).toContainEqual(
         expect.objectContaining({
-          uri: expect.stringContaining('ben10://context'),
+          uri: expect.stringContaining('ben-ten://context'),
         }),
       );
     });
@@ -251,7 +251,7 @@ describe('Ben10Server', () => {
 
   describe('readResource', () => {
     it('returns empty when no context exists', async () => {
-      const result = await server.readResource('ben10://context');
+      const result = await server.readResource('ben-ten://context');
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -272,7 +272,7 @@ describe('Ben10Server', () => {
         JSON.stringify(contextData),
       );
 
-      const result = await server.readResource('ben10://context');
+      const result = await server.readResource('ben-ten://context');
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -281,7 +281,7 @@ describe('Ben10Server', () => {
     });
 
     it('returns error for unknown resource', async () => {
-      const result = await server.readResource('ben10://unknown');
+      const result = await server.readResource('ben-ten://unknown');
 
       expect(isErr(result)).toBe(true);
     });

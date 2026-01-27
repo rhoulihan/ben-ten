@@ -1,9 +1,20 @@
 import type { FileSystem } from '../adapters/fs/memory-fs.js';
-import type { ContextData, HookInput } from '../core/types.js';
-import type { Ben10Error } from '../infrastructure/errors.js';
+import type { ContextData, ContextMetadata, HookInput } from '../core/types.js';
+import type { BenTenError } from '../infrastructure/errors.js';
 import type { Logger } from '../infrastructure/logger.js';
 import { type Result, err, ok } from '../infrastructure/result.js';
 import { createContextService } from './context-service.js';
+
+/** Simple hash function for directory paths */
+const hashDirectory = (path: string): string => {
+  let hash = 0;
+  for (let i = 0; i < path.length; i++) {
+    const char = path.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash).toString(16);
+};
 
 /** Result of handling a SessionStart event */
 export interface SessionStartResult {
@@ -26,15 +37,15 @@ export interface HookHandler {
   /** Handle a SessionStart event */
   handleSessionStart(
     input: HookInput,
-  ): Promise<Result<SessionStartResult, Ben10Error>>;
+  ): Promise<Result<SessionStartResult, BenTenError>>;
 
   /** Handle a PreCompact event */
   handlePreCompact(
     input: HookInput,
-  ): Promise<Result<PreCompactResult, Ben10Error>>;
+  ): Promise<Result<PreCompactResult, BenTenError>>;
 
   /** Dispatch to appropriate handler based on hook_event_name */
-  handle(input: HookInput): Promise<Result<HookResult, Ben10Error>>;
+  handle(input: HookInput): Promise<Result<HookResult, BenTenError>>;
 }
 
 export interface HookHandlerDeps {
@@ -62,10 +73,35 @@ export const createHookHandler = (deps: HookHandlerDeps): HookHandler => {
         projectDir,
       });
 
+      // Save metadata with transcript path for later use by ben_ten_save
+      const saveMetadata = async () => {
+        // Load existing metadata to preserve session count
+        let sessionCount = 1;
+        if (await contextService.hasMetadata()) {
+          const existingMeta = await contextService.loadMetadata();
+          if (existingMeta.ok) {
+            sessionCount = existingMeta.value.sessionCount + 1;
+          }
+        }
+
+        const metadata: ContextMetadata = {
+          directory: projectDir,
+          directoryHash: hashDirectory(projectDir),
+          lastSessionId: input.session_id,
+          sessionCount,
+          lastSavedAt: Date.now(),
+          transcriptPath: input.transcript_path,
+        };
+        await contextService.saveMetadata(metadata);
+      };
+
       // Handle based on source
       switch (input.source) {
         case 'startup':
         case 'resume': {
+          // Save metadata with transcript path
+          await saveMetadata();
+
           // Load existing context if available
           if (await contextService.hasContext()) {
             const loadResult = await contextService.loadContext();
@@ -94,7 +130,7 @@ export const createHookHandler = (deps: HookHandlerDeps): HookHandler => {
 
         case 'compact': {
           // After compaction, just load existing context if available
-          // Saving is handled by ben10_save MCP tool
+          // Saving is handled by ben_ten_save MCP tool
           logger.debug('Compaction occurred, loading existing context');
           if (await contextService.hasContext()) {
             const loadResult = await contextService.loadContext();
@@ -172,7 +208,7 @@ export const createHookHandler = (deps: HookHandlerDeps): HookHandler => {
           return handler.handlePreCompact(input);
         default:
           // SessionEnd and other events are no-ops
-          // Saving is handled by ben10_save MCP tool
+          // Saving is handled by ben_ten_save MCP tool
           logger.debug('Ignoring hook event', {
             hookEventName: input.hook_event_name,
           });

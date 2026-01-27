@@ -1,13 +1,13 @@
-# Ben10
+# Ben-Ten
 
-[![CI](https://github.com/rhoulihan/Ben10/actions/workflows/ci.yml/badge.svg)](https://github.com/rhoulihan/Ben10/actions/workflows/ci.yml)
+[![CI](https://github.com/rhoulihan/ben-ten/actions/workflows/ci.yml/badge.svg)](https://github.com/rhoulihan/ben-ten/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-139%20passing-brightgreen)](https://github.com/rhoulihan/Ben10)
+[![Tests](https://img.shields.io/badge/tests-180%20passing-brightgreen)](https://github.com/rhoulihan/ben-ten)
 
 **Photographic memory for Claude Code** - Named after Ben Tennyson's legendary photographic memory.
 
-Ben10 persists context across Claude Code sessions, allowing Claude to remember what you were working on even after compaction or session restarts.
+Ben-Ten persists context across Claude Code sessions, allowing Claude to remember what you were working on even after compaction or session restarts.
 
 ## Features
 
@@ -23,16 +23,16 @@ Ben10 persists context across Claude Code sessions, allowing Claude to remember 
 - Node.js 20.0.0 or higher
 - [Claude Code](https://claude.ai/claude-code) CLI installed and configured
 
-### Step 1: Install Ben10 Globally
+### Step 1: Install Ben-Ten Globally
 
 ```bash
-npm install -g ben10
+npm install -g ben-ten
 ```
 
 Verify the installation:
 
 ```bash
-ben10 --version
+ben-ten --version
 ```
 
 ### Step 2: Configure Claude Code Hooks
@@ -47,7 +47,7 @@ Add hook configuration to your Claude Code settings. You can configure hooks at 
     "SessionStart": [
       {
         "type": "command",
-        "command": "ben10 hook"
+        "command": "ben-ten hook"
       }
     ]
   }
@@ -62,7 +62,7 @@ Add hook configuration to your Claude Code settings. You can configure hooks at 
     "SessionStart": [
       {
         "type": "command",
-        "command": "ben10 hook"
+        "command": "ben-ten hook"
       }
     ]
   }
@@ -71,25 +71,25 @@ Add hook configuration to your Claude Code settings. You can configure hooks at 
 
 #### Hook Events Explained
 
-| Hook | When It Fires | Ben10 Action |
+| Hook | When It Fires | Ben-Ten Action |
 |------|---------------|--------------|
 | `SessionStart` | When Claude Code starts or resumes | Loads saved context into the conversation |
 | `SessionStart` | After compaction (`source: "compact"`) | Loads existing context (no auto-save) |
 | `SessionStart` | With `source: "clear"` | Deletes existing context |
 
-**Note:** Context is saved only via the `ben10_save` MCP tool. This gives Claude control over when and what to save.
+**Note:** Context is saved only via the `ben-ten_save` MCP tool. This gives Claude control over when and what to save.
 
 ### Step 3: Configure MCP Server (Required for Saving)
 
-The MCP server provides the `ben10_save` tool that Claude uses to save context.
+The MCP server provides the `ben-ten_save` tool that Claude uses to save context.
 
 Create `.mcp.json` in your project root:
 
 ```json
 {
   "mcpServers": {
-    "ben10": {
-      "command": "ben10",
+    "ben-ten": {
+      "command": "ben-ten",
       "args": ["serve"]
     }
   }
@@ -101,8 +101,8 @@ Or add to your user-level MCP configuration (`~/.claude/mcp.json`):
 ```json
 {
   "mcpServers": {
-    "ben10": {
-      "command": "ben10",
+    "ben-ten": {
+      "command": "ben-ten",
       "args": ["serve"]
     }
   }
@@ -111,88 +111,88 @@ Or add to your user-level MCP configuration (`~/.claude/mcp.json`):
 
 The MCP server exposes these tools to Claude:
 
-- `ben10_status` - Check if context exists
-- `ben10_save` - Save context with custom summary, keyFiles, and activeTasks
-- `ben10_load` - Load existing context
-- `ben10_clear` - Delete context
+- `ben-ten_status` - Check if context exists
+- `ben-ten_save` - Save context with custom summary, keyFiles, and activeTasks
+- `ben-ten_load` - Load existing context
+- `ben-ten_clear` - Delete context
 
 ### Step 4: Initialize Your Project (Optional)
 
 ```bash
 cd your-project
-ben10 init
+ben-ten init
 ```
 
-This creates a `.ben10/` directory in your project. This step is optional—Ben10 will create the directory automatically when first saving context.
+This creates a `.ben-ten/` directory in your project. This step is optional—Ben-Ten will create the directory automatically when first saving context.
 
 ### Verifying Installation
 
 1. Start a new Claude Code session in your project
-2. You should see "Ben10 Context Loaded" in the startup output (if context exists)
+2. You should see "Ben-Ten Context Loaded" in the startup output (if context exists)
 3. Check context status anytime:
    ```bash
-   ben10 status
+   ben-ten status
    ```
 
 ## Quick Start
 
-Once installed, Ben10 works like this:
+Once installed, Ben-Ten works like this:
 
-1. **Start Claude Code** - Context is loaded from `.ben10/context.json` if it exists
-2. **Work with Claude** - Claude can call `ben10_save` to save context at any time
+1. **Start Claude Code** - Context is loaded from `.ben-ten/context.json` if it exists
+2. **Work with Claude** - Claude can call `ben-ten_save` to save context at any time
 3. **End session** - Saved context persists for next time
 4. **Resume later** - Previous context is restored automatically
 
 ## How It Works
 
-Ben10 integrates with Claude Code through hooks and MCP:
+Ben-Ten integrates with Claude Code through hooks and MCP:
 
 | Component | Action |
 |-----------|--------|
-| `SessionStart` hook | Loads existing context from `.ben10/context.json` |
-| `ben10_save` MCP tool | Saves context (summary, keyFiles, activeTasks) |
-| `ben10_load` MCP tool | Loads context programmatically |
-| `ben10_clear` MCP tool | Deletes context |
+| `SessionStart` hook | Loads existing context from `.ben-ten/context.json` |
+| `ben-ten_save` MCP tool | Saves context (summary, keyFiles, activeTasks) |
+| `ben-ten_load` MCP tool | Loads context programmatically |
+| `ben-ten_clear` MCP tool | Deletes context |
 
-Context is stored in `.ben10/context.json` at your project root.
+Context is stored in `.ben-ten/context.json` at your project root.
 
 ## CLI Commands
 
 ```bash
-# Initialize Ben10 for a project
-ben10 init
+# Initialize Ben-Ten for a project
+ben-ten init
 
 # Check context status
-ben10 status
+ben-ten status
 
 # Display full context summary
-ben10 show
+ben-ten show
 
 # Delete context
-ben10 clear
+ben-ten clear
 
 # Process Claude Code hooks (used by hooks, not typically run manually)
-ben10 hook
+ben-ten hook
 ```
 
 ## MCP Server
 
-Ben10 can also run as an MCP (Model Context Protocol) server, exposing tools for context management:
+Ben-Ten can also run as an MCP (Model Context Protocol) server, exposing tools for context management:
 
 ### Tools
 
-- `ben10_status` - Get context status for the current project
-- `ben10_save` - Save context data
-- `ben10_load` - Load existing context
-- `ben10_clear` - Delete context
+- `ben-ten_status` - Get context status for the current project
+- `ben-ten_save` - Save context data
+- `ben-ten_load` - Load existing context
+- `ben-ten_clear` - Delete context
 
 ### Resources
 
-- `ben10://context` - Read the current project context
+- `ben-ten://context` - Read the current project context
 
 ## Context Data Structure
 
-Ben10 stores context in the following format:
+Ben-Ten stores context in the following format:
 
 ```typescript
 interface ContextData {
@@ -230,7 +230,7 @@ npm run typecheck
 
 ## Architecture
 
-Ben10 follows a clean architecture with clear separation of concerns:
+Ben-Ten follows a clean architecture with clear separation of concerns:
 
 ```
 src/

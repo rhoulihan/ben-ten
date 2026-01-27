@@ -2,9 +2,14 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import type { FileSystem } from '../adapters/fs/memory-fs.js';
-import type { ContextData } from '../core/types.js';
+import {
+  CONTEXT_VERSION,
+  type ContextData,
+  type FileMetadata,
+} from '../core/types.js';
 import type { Logger } from '../infrastructure/logger.js';
 import { createContextService } from '../services/context-service.js';
+import { createTranscriptService } from '../services/transcript-service.js';
 
 export interface McpTransportDeps {
   fs: FileSystem;
@@ -13,24 +18,25 @@ export interface McpTransportDeps {
 }
 
 /**
- * Creates and starts a Ben10 MCP server with stdio transport.
- * This is the main entry point for running Ben10 as an MCP server.
+ * Creates and starts a Ben-Ten MCP server with stdio transport.
+ * This is the main entry point for running Ben-Ten as an MCP server.
  */
 export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
   const { fs, logger, projectDir } = deps;
   const contextService = createContextService({ fs, logger, projectDir });
+  const transcriptService = createTranscriptService({ fs, logger });
 
   // Create the MCP server
   const server = new McpServer({
-    name: 'ben10',
+    name: 'ben-ten',
     version: '0.1.0',
   });
 
-  // Register ben10_status tool
+  // Register ben_ten_status tool
   server.registerTool(
-    'ben10_status',
+    'ben_ten_status',
     {
-      description: 'Get the status of Ben10 context for this project',
+      description: 'Get the status of Ben-Ten context for this project',
       inputSchema: {},
     },
     async () => {
@@ -62,11 +68,11 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
     },
   );
 
-  // Register ben10_save tool
+  // Register ben_ten_save tool
   server.registerTool(
-    'ben10_save',
+    'ben_ten_save',
     {
-      description: 'Save context data to .ben10/context.json',
+      description: 'Save context data to .ben-ten/context.json',
       inputSchema: {
         sessionId: z.string().describe('Current session ID'),
         summary: z.string().describe('Summary of the session context'),
@@ -87,8 +93,9 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
         }
       }
 
+      // Build enriched v2.0.0 context
       const contextData: ContextData = {
-        version: '1.0.0',
+        version: CONTEXT_VERSION,
         createdAt,
         updatedAt: Date.now(),
         sessionId,
@@ -96,6 +103,47 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
         keyFiles,
         activeTasks,
       };
+
+      // Try to enrich context from transcript
+      if (await contextService.hasMetadata()) {
+        const metadataResult = await contextService.loadMetadata();
+        if (metadataResult.ok && metadataResult.value.transcriptPath) {
+          const transcriptPath = metadataResult.value.transcriptPath;
+          const transcriptResult =
+            await transcriptService.parseTranscript(transcriptPath);
+
+          if (transcriptResult.ok) {
+            const conversation = transcriptResult.value;
+            contextData.conversation = conversation;
+
+            // Extract file references
+            const extractedFiles =
+              transcriptService.extractFileReferences(conversation);
+            if (extractedFiles.length > 0) {
+              const now = Date.now();
+              contextData.files = extractedFiles.map(
+                (path): FileMetadata => ({
+                  path,
+                  lastAccessed: now,
+                  accessCount: 1,
+                }),
+              );
+            }
+
+            // Extract tool history
+            const toolCalls = transcriptService.extractToolCalls(conversation);
+            if (toolCalls.length > 0) {
+              contextData.toolHistory = toolCalls;
+            }
+          } else {
+            // Log warning but continue without enrichment
+            logger.warn('Failed to parse transcript for enrichment', {
+              path: transcriptPath,
+              error: transcriptResult.error.message,
+            });
+          }
+        }
+      }
 
       const saveResult = await contextService.saveContext(contextData);
       if (!saveResult.ok) {
@@ -128,11 +176,11 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
     },
   );
 
-  // Register ben10_load tool
+  // Register ben_ten_load tool
   server.registerTool(
-    'ben10_load',
+    'ben_ten_load',
     {
-      description: 'Load context data from .ben10/context.json',
+      description: 'Load context data from .ben-ten/context.json',
       inputSchema: {},
     },
     async () => {
@@ -160,9 +208,9 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
     },
   );
 
-  // Register ben10_clear tool
+  // Register ben_ten_clear tool
   server.registerTool(
-    'ben10_clear',
+    'ben_ten_clear',
     {
       description: 'Delete the context file',
       inputSchema: {},
@@ -192,15 +240,15 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
     },
   );
 
-  // Register ben10://context resource
-  server.resource('Project Context', 'ben10://context', async () => {
+  // Register ben-ten://context resource
+  server.resource('Project Context', 'ben-ten://context', async () => {
     const hasContext = await contextService.hasContext();
 
     if (!hasContext) {
       return {
         contents: [
           {
-            uri: 'ben10://context',
+            uri: 'ben-ten://context',
             mimeType: 'text/plain',
             text: 'No context found for this project.',
           },
@@ -213,7 +261,7 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
       return {
         contents: [
           {
-            uri: 'ben10://context',
+            uri: 'ben-ten://context',
             mimeType: 'text/plain',
             text: `Error loading context: ${loadResult.error.message}`,
           },
@@ -223,7 +271,7 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
 
     const ctx = loadResult.value;
     const lines = [
-      '# Ben10 Project Context',
+      '# Ben-Ten Project Context',
       '',
       `**Session ID:** ${ctx.sessionId}`,
       `**Created:** ${new Date(ctx.createdAt).toISOString()}`,
@@ -250,7 +298,7 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
     return {
       contents: [
         {
-          uri: 'ben10://context',
+          uri: 'ben-ten://context',
           mimeType: 'text/markdown',
           text: lines.join('\n'),
         },
@@ -262,5 +310,5 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  logger.info('Ben10 MCP server started', { projectDir });
+  logger.info('Ben-Ten MCP server started', { projectDir });
 };

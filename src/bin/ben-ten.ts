@@ -9,8 +9,8 @@ import { createContextService } from '../services/context-service.js';
 const program = new Command();
 
 program
-  .name('ben10')
-  .description('Ben10 - Photographic memory for Claude Code')
+  .name('ben-ten')
+  .description('Ben-Ten - Photographic memory for Claude Code')
   .version('0.1.0');
 
 program
@@ -22,7 +22,7 @@ program
 
 program
   .command('status')
-  .description('Show Ben10 context status for current directory')
+  .description('Show Ben-Ten context status for current directory')
   .action(async () => {
     const fs = createNodeFs();
     const logger = createLogger({ level: LogLevel.WARN });
@@ -33,7 +33,7 @@ program
     const contextPath = contextService.getContextPath();
 
     if (!hasContext) {
-      console.log('No Ben10 context found.');
+      console.log('No Ben-Ten context found.');
       console.log(`Path: ${contextPath}`);
       return;
     }
@@ -45,7 +45,7 @@ program
     }
 
     const ctx = loadResult.value;
-    console.log('Ben10 Context Status');
+    console.log('Ben-Ten Context Status');
     console.log('====================');
     console.log(`Path: ${contextPath}`);
     console.log(`Session ID: ${ctx.sessionId}`);
@@ -76,7 +76,7 @@ program
     }
 
     const ctx = loadResult.value;
-    console.log('# Ben10 Context');
+    console.log('# Ben-Ten Context');
     console.log();
     console.log(`**Session:** ${ctx.sessionId}`);
     console.log(`**Last Updated:** ${new Date(ctx.updatedAt).toISOString()}`);
@@ -117,7 +117,7 @@ program
 
 program
   .command('init')
-  .description('Initialize Ben10 for this project')
+  .description('Initialize Ben-Ten for this project')
   .action(async () => {
     const fs = createNodeFs();
     const logger = createLogger({ level: LogLevel.WARN });
@@ -126,13 +126,13 @@ program
 
     // Check if already initialized
     if (await contextService.hasContext()) {
-      console.log('Ben10 already initialized.');
+      console.log('Ben-Ten already initialized.');
       console.log(`Context: ${contextService.getContextPath()}`);
       return;
     }
 
-    // Create the .ben10 directory
-    const mkdirResult = await fs.mkdir(contextService.getBen10Dir(), {
+    // Create the .ben-ten directory
+    const mkdirResult = await fs.mkdir(contextService.getBenTenDir(), {
       recursive: true,
     });
     if (!mkdirResult.ok) {
@@ -140,16 +140,16 @@ program
       process.exit(1);
     }
 
-    console.log('Ben10 initialized.');
-    console.log(`Directory: ${contextService.getBen10Dir()}`);
+    console.log('Ben-Ten initialized.');
+    console.log(`Directory: ${contextService.getBenTenDir()}`);
     console.log();
     console.log('To use with Claude Code, add to .claude/settings.json:');
     console.log(
       JSON.stringify(
         {
           hooks: {
-            SessionStart: ['ben10 hook'],
-            SessionEnd: ['ben10 hook'],
+            SessionStart: ['ben-ten hook'],
+            SessionEnd: ['ben-ten hook'],
           },
         },
         null,
@@ -160,7 +160,7 @@ program
 
 program
   .command('serve')
-  .description('Start Ben10 as an MCP server (stdio transport)')
+  .description('Start Ben-Ten as an MCP server (stdio transport)')
   .action(async () => {
     const fs = createNodeFs();
     const logger = createLogger({ level: LogLevel.INFO });

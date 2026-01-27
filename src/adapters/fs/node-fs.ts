@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import {
-  type Ben10Error,
+  type BenTenError,
   ErrorCode,
   createError,
 } from '../../infrastructure/errors.js';
@@ -19,7 +19,7 @@ import type {
  * @returns A FileSystem implementation using real filesystem
  */
 export const createNodeFs = (): FileSystem => {
-  const mapError = (error: unknown, path: string): Ben10Error => {
+  const mapError = (error: unknown, path: string): BenTenError => {
     if (error instanceof Error) {
       const nodeError = error as NodeJS.ErrnoException;
 

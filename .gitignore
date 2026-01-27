@@ -17,8 +17,8 @@ coverage/
 .DS_Store
 Thumbs.db
 
-# Ben10 context (should not be committed)
-.ben10/
+# Ben-Ten context (should not be committed)
+.ben-ten/
 
 # Environment
 .env
