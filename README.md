@@ -3,7 +3,7 @@
 [![CI](https://github.com/rhoulihan/ben-ten/actions/workflows/ci.yml/badge.svg)](https://github.com/rhoulihan/ben-ten/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-277%20passing-brightgreen)](https://github.com/rhoulihan/ben-ten)
+[![Tests](https://img.shields.io/badge/tests-325%20passing-brightgreen)](https://github.com/rhoulihan/ben-ten)
 
 **Photographic memory for Claude Code** - Named after Ben Tennyson's legendary photographic memory.
 
@@ -13,8 +13,10 @@ Ben-Ten persists context across Claude Code sessions, allowing Claude to remembe
 
 - **Automatic Context Persistence** - Hooks into Claude Code lifecycle events to save context automatically
 - **Post-Compaction Recovery** - Captures compacted summaries so context survives memory limits
+- **Conversation Replay** - Generates condensed conversation replays from transcripts with intelligent stopping points
 - **LZ4 Compression** - Context files are compressed with LZ4 for ~90% size reduction
 - **MCP Server** - Exposes tools and resources for programmatic context management
+- **Configurable Token Budget** - Control replay size via `maxReplayPercent` and `contextWindowSize` settings
 - **Zero Configuration** - Works out of the box with sensible defaults
 
 ## Installation
@@ -116,6 +118,7 @@ The MCP server exposes these tools to Claude:
 - `ben_ten_save` - Save context with summary, keyFiles, activeTasks, and optional transcriptPath
 - `ben_ten_load` - Load existing context
 - `ben_ten_clear` - Delete context
+- `ben_ten_config` - Get or set configuration (maxReplayPercent, contextWindowSize)
 
 **Transcript Auto-Discovery:** The `ben_ten_save` tool automatically discovers and parses Claude Code's transcript to extract conversation history, file references, and tool calls. No hooks required — it finds the most recent transcript in `~/.claude/projects/`.
 
@@ -187,9 +190,10 @@ Ben-Ten can also run as an MCP (Model Context Protocol) server, exposing tools f
 | Tool | Description |
 |------|-------------|
 | `ben_ten_status` | Get context status for the current project |
-| `ben_ten_save` | Save context with summary, keyFiles, activeTasks. Auto-discovers transcript for enrichment. |
+| `ben_ten_save` | Save context with summary, keyFiles, activeTasks. Auto-discovers transcript for enrichment and generates conversation replay. |
 | `ben_ten_load` | Load existing context |
 | `ben_ten_clear` | Delete context |
+| `ben_ten_config` | Get or set configuration settings (maxReplayPercent, contextWindowSize) |
 
 #### ben_ten_save Parameters
 
@@ -222,12 +226,40 @@ interface ContextData {
     messages: TranscriptEntry[];
     messageCount: number;
   };
+  conversationReplay?: string;  // Condensed markdown replay of recent conversation
+  replayMetadata?: {            // Metadata about the generated replay
+    tokenCount: number;
+    messageCount: number;
+    stoppingPointType: string | null;
+    generatedAt: number;
+  };
   files?: FileMetadata[];       // File references extracted from conversation
   toolHistory?: ToolExecution[]; // Tool calls extracted from conversation
 }
 ```
 
-The `conversation`, `files`, and `toolHistory` fields are automatically populated when Ben-Ten parses the Claude Code transcript during save.
+The `conversation`, `conversationReplay`, `files`, and `toolHistory` fields are automatically populated when Ben-Ten parses the Claude Code transcript during save.
+
+### Conversation Replay
+
+Ben-Ten generates a condensed conversation replay that fits within a configurable token budget. The replay:
+
+- Parses the transcript backwards to find logical stopping points (git commits, task completions, semantic markers)
+- Formats recent messages as markdown for easy reading
+- Respects the configured `maxReplayPercent` of `contextWindowSize`
+
+Configure replay settings via the `ben_ten_config` tool:
+
+```bash
+# Get current config
+ben_ten_config action=get
+
+# Set max replay percentage (default: 10%)
+ben_ten_config action=set key=maxReplayPercent value=15
+
+# Set context window size (default: 200000 tokens)
+ben_ten_config action=set key=contextWindowSize value=128000
+```
 
 ### Binary File Format
 
@@ -280,6 +312,8 @@ src/
 ├── services/        # Business logic
 │   ├── context-service.ts      # Context persistence
 │   ├── compression-service.ts  # LZ4 compression wrapper
+│   ├── config-service.ts       # Configuration management
+│   ├── replay-service.ts       # Conversation replay generation
 │   ├── serializer-service.ts   # Binary format serialization
 │   ├── hook-handler.ts         # Claude Code hook handling
 │   └── transcript-service.ts   # Transcript parsing

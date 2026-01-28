@@ -17,14 +17,17 @@
 - ✅ Hook handler (SessionStart, PreCompact lifecycle events)
 - ✅ Transcript service with parsing and extraction
 - ✅ **Transcript auto-discovery** (finds transcripts in ~/.claude/projects/ without hooks)
-- ✅ MCP server with tools (ben_ten_status, ben_ten_save, ben_ten_load, ben_ten_clear)
+- ✅ MCP server with tools (ben_ten_status, ben_ten_save, ben_ten_load, ben_ten_clear, ben_ten_config)
 - ✅ MCP resource (ben-ten://context)
 - ✅ CLI commands (hook, status, show, clear, init, serve)
-- ✅ 230 tests passing
+- ✅ **LZ4 compression** for context storage (~90% size reduction)
+- ✅ **Conversation Replay** - generates condensed replays with intelligent stopping points
+- ✅ **Configuration service** - maxReplayPercent, contextWindowSize settings
+- ✅ 325 tests passing
 
 ### Pending Features
 - ⏳ MessagePack serialization (dependencies installed, not implemented)
-- ⏳ LZ4/ZSTD compression (dependencies installed, not implemented)
+- ⏳ ZSTD compression for archival snapshots
 - ⏳ Snapshot/compaction system (schema defined, no logic)
 - ⏳ Rolling checkpoints for crash recovery
 - ⏳ Configuration file loading (config.yaml)
@@ -237,6 +240,10 @@ ben-ten/
 │   │
 │   ├── services/                    # Application services
 │   │   ├── context-service.ts       # Context CRUD operations ✅
+│   │   ├── compression-service.ts   # LZ4 compression wrapper ✅
+│   │   ├── config-service.ts        # Configuration management ✅
+│   │   ├── replay-service.ts        # Conversation replay generation ✅
+│   │   ├── serializer-service.ts    # Binary format serialization ✅
 │   │   ├── hook-handler.ts          # Lifecycle hook handling ✅
 │   │   ├── transcript-service.ts    # Transcript parsing & auto-discovery ✅
 │   │   ├── checkpoint-service.ts    # Periodic checkpointing (planned)
@@ -310,6 +317,7 @@ export async function startServer(server: McpServer): Promise<void>;
 | `ben-ten_save` | Save current context | `{ name?: string }` |
 | `ben-ten_restore` | Restore context | `{ name?: string, mode?: RestoreMode }` |
 | `ben-ten_status` | Get context status | `{}` |
+| `ben-ten_config` | Get/set configuration | `{ action: 'get' \| 'set', key?, value? }` |
 | `ben-ten_diff` | Show filesystem changes | `{}` |
 | `ben-ten_clear` | Clear context | `{ force?: boolean }` |
 | `ben-ten_snapshot_list` | List compaction snapshots | `{ verbose?: boolean }` |
@@ -416,6 +424,61 @@ The `discoverTranscriptPath` method enables transcript extraction without requir
 3. Returns the most recently modified transcript file
 
 This allows `ben_ten_save` to work without any hook configuration.
+
+---
+
+### 3.3b Replay Service ✅ IMPLEMENTED
+
+**Purpose:** Generate condensed conversation replays from transcripts with intelligent stopping points.
+
+**Public Interface:**
+```typescript
+export interface ReplayService {
+  // Generate a conversation replay within token budget
+  generateReplay(
+    conversation: ConversationHistory,
+    config: ReplayConfig
+  ): Result<ReplayResult, BenTenError>;
+}
+
+export interface ReplayConfig {
+  maxReplayPercent: number;    // Default: 10 (10% of context window)
+  contextWindowSize: number;   // Default: 200000 tokens
+}
+
+export interface ReplayResult {
+  replay: string;              // Markdown-formatted conversation replay
+  metadata: ReplayMetadata;
+}
+
+export interface ReplayMetadata {
+  tokenCount: number;
+  messageCount: number;
+  stoppingPointType: 'git_commit' | 'task_completion' | 'semantic_marker' | null;
+  generatedAt: number;
+}
+```
+
+**Stopping Point Detection:**
+
+The replay service parses transcripts backwards to find logical stopping points:
+
+1. **Git commits** (highest priority) - Detects "git commit" in assistant messages
+2. **Task completions** - Detects "completed", "finished", "done" patterns
+3. **Semantic markers** - Detects "let's move on", "next task" patterns
+
+**Configuration via `ben_ten_config` tool:**
+
+```bash
+# Get current config
+ben_ten_config action=get
+
+# Set max replay percentage (default: 10%)
+ben_ten_config action=set key=maxReplayPercent value=15
+
+# Set context window size (default: 200000 tokens)
+ben_ten_config action=set key=contextWindowSize value=128000
+```
 
 ---
 

@@ -99,6 +99,20 @@ export const runHookCommand = async (
         output += '\n\n## Active Tasks\n';
         output += ctx.activeTasks.map((t) => `- ${t}`).join('\n');
       }
+
+      // Include conversation replay if available
+      if (ctx.conversationReplay) {
+        output += `\n\n${ctx.conversationReplay}`;
+
+        if (ctx.replayMetadata) {
+          const meta = ctx.replayMetadata;
+          output += `\n\n*[Replay: ${meta.messageCount} messages, ~${meta.tokenCount} tokens`;
+          if (meta.stoppingPointType) {
+            output += `, stopped at: ${meta.stoppingPointType}`;
+          }
+          output += ']*';
+        }
+      }
     }
   }
 

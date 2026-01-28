@@ -30,3 +30,25 @@ export {
   FORMAT_VERSION,
   COMPRESSION_TYPE,
 } from './serializer-service.js';
+
+export {
+  createConfigService,
+  type ConfigService,
+  type ConfigServiceDeps,
+  type BenTenConfig,
+  CONFIG_FILE,
+  DEFAULT_CONFIG,
+} from './config-service.js';
+
+export {
+  createReplayService,
+  type ReplayService,
+  type ReplayServiceDeps,
+  type ReplayOptions,
+  type ReplayResult,
+  type StoppingPointType,
+  estimateTokens,
+  isGitCommit,
+  isTaskCompletion,
+  isSemanticMarker,
+} from './replay-service.js';

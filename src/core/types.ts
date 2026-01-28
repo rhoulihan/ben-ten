@@ -133,6 +133,25 @@ export const ConversationHistorySchema = z.object({
 export type ConversationHistory = z.infer<typeof ConversationHistorySchema>;
 
 /**
+ * Schema for replay metadata.
+ * Tracks information about the generated conversation replay.
+ */
+export const ReplayMetadataSchema = z.object({
+  /** Estimated token count of the replay */
+  tokenCount: z.number(),
+  /** Number of messages included in replay */
+  messageCount: z.number(),
+  /** Type of stopping point detected, if any */
+  stoppingPointType: z
+    .enum(['git_commit', 'task_completion', 'semantic_marker', 'token_budget'])
+    .nullable(),
+  /** When the replay was generated */
+  generatedAt: z.number(),
+});
+
+export type ReplayMetadata = z.infer<typeof ReplayMetadataSchema>;
+
+/**
  * Schema for file metadata tracking.
  */
 export const FileMetadataSchema = z.object({
@@ -225,6 +244,12 @@ export const ContextDataSchema = z.object({
     .optional(),
   /** Token count before compaction */
   preCompactionTokenCount: z.number().optional(),
+
+  // v2.1.0 fields - Conversation Replay
+  /** Condensed conversation replay markdown */
+  conversationReplay: z.string().optional(),
+  /** Metadata about the replay generation */
+  replayMetadata: ReplayMetadataSchema.optional(),
 });
 
 export type ContextData = z.infer<typeof ContextDataSchema>;

@@ -8,7 +8,12 @@ import {
   type FileMetadata,
 } from '../core/types.js';
 import type { Logger } from '../infrastructure/logger.js';
+import {
+  DEFAULT_CONFIG,
+  createConfigService,
+} from '../services/config-service.js';
 import { createContextService } from '../services/context-service.js';
+import { createReplayService } from '../services/replay-service.js';
 import { createTranscriptService } from '../services/transcript-service.js';
 
 export interface McpTransportDeps {
@@ -25,6 +30,8 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
   const { fs, logger, projectDir } = deps;
   const contextService = createContextService({ fs, logger, projectDir });
   const transcriptService = createTranscriptService({ fs, logger });
+  const configService = createConfigService({ fs, logger, projectDir });
+  const replayService = createReplayService({ logger });
 
   // Create the MCP server
   const server = new McpServer({
@@ -160,6 +167,33 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
           if (toolCalls.length > 0) {
             contextData.toolHistory = toolCalls;
           }
+
+          // Generate conversation replay
+          const configResult = await configService.loadConfig();
+          const config = configResult.ok ? configResult.value : DEFAULT_CONFIG;
+          const maxTokens = Math.floor(
+            (config.contextWindowSize * config.maxReplayPercent) / 100,
+          );
+
+          const replayResult = replayService.generateReplay(
+            conversation.messages,
+            { maxTokens },
+          );
+
+          if (replayResult.ok) {
+            contextData.conversationReplay = replayResult.value.replay;
+            contextData.replayMetadata = {
+              tokenCount: replayResult.value.tokenCount,
+              messageCount: replayResult.value.messageCount,
+              stoppingPointType: replayResult.value.stoppingPointType,
+              generatedAt: Date.now(),
+            };
+            logger.info('Generated conversation replay', {
+              tokenCount: replayResult.value.tokenCount,
+              messageCount: replayResult.value.messageCount,
+              stoppingPointType: replayResult.value.stoppingPointType,
+            });
+          }
         } else {
           // Log warning but continue without enrichment
           logger.warn('Failed to parse transcript for enrichment', {
@@ -258,6 +292,97 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
           {
             type: 'text' as const,
             text: JSON.stringify({ cleared: true }, null, 2),
+          },
+        ],
+      };
+    },
+  );
+
+  // Register ben_ten_config tool
+  server.registerTool(
+    'ben_ten_config',
+    {
+      description:
+        'Get or set Ben-Ten configuration. Use action "get" to retrieve current config, or "set" to update a config value.',
+      inputSchema: {
+        action: z
+          .enum(['get', 'set'])
+          .describe('Action to perform: "get" or "set"'),
+        key: z
+          .enum(['maxReplayPercent', 'contextWindowSize'])
+          .optional()
+          .describe('Config key to set (required for "set" action)'),
+        value: z
+          .number()
+          .optional()
+          .describe('Config value to set (required for "set" action)'),
+      },
+    },
+    async ({ action, key, value }) => {
+      if (action === 'get') {
+        const loadResult = await configService.loadConfig();
+        if (!loadResult.ok) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Error loading config: ${loadResult.error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(loadResult.value, null, 2),
+            },
+          ],
+        };
+      }
+
+      // action === 'set'
+      if (!key || value === undefined) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Error: "key" and "value" are required for "set" action',
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const saveResult = await configService.saveConfig({ [key]: value });
+      if (!saveResult.ok) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Error saving config: ${saveResult.error.message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Return updated config
+      const updatedConfig = await configService.loadConfig();
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify(
+              {
+                success: true,
+                config: updatedConfig.ok ? updatedConfig.value : DEFAULT_CONFIG,
+              },
+              null,
+              2,
+            ),
           },
         ],
       };
