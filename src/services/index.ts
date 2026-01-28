@@ -42,10 +42,12 @@ export {
 
 export {
   createReplayService,
+  findAllStoppingPoints,
   type ReplayService,
   type ReplayServiceDeps,
   type ReplayOptions,
   type ReplayResult,
+  type StoppingPoint,
   type StoppingPointType,
   estimateTokens,
   isGitCommit,

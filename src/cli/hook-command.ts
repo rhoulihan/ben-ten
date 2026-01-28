@@ -80,11 +80,32 @@ export const runHookCommand = async (
     const result = handleResult.value as SessionStartResult;
     if (result.contextLoaded && result.context) {
       const ctx = result.context;
+
+      // Format the last updated time in a human-readable way
+      const lastUpdated = new Date(ctx.updatedAt);
+      const now = new Date();
+      const diffMs = now.getTime() - lastUpdated.getTime();
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffHours / 24);
+
+      let timeAgo: string;
+      if (diffDays > 0) {
+        timeAgo = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+      } else if (diffHours > 0) {
+        timeAgo = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+      } else {
+        const diffMins = Math.floor(diffMs / (1000 * 60));
+        timeAgo =
+          diffMins > 0
+            ? `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`
+            : 'just now';
+      }
+
       output = [
         '# Ben-Ten Context Loaded',
         '',
         `**Previous Session:** ${ctx.sessionId}`,
-        `**Last Updated:** ${new Date(ctx.updatedAt).toISOString()}`,
+        `**Last Updated:** ${timeAgo} (${lastUpdated.toISOString()})`,
         '',
         '## Summary',
         ctx.summary,
@@ -106,11 +127,24 @@ export const runHookCommand = async (
 
         if (ctx.replayMetadata) {
           const meta = ctx.replayMetadata;
-          output += `\n\n*[Replay: ${meta.messageCount} messages, ~${meta.tokenCount} tokens`;
+          const totalStops = meta.allStoppingPoints?.length ?? 0;
+          const currentStop = (meta.currentStopIndex ?? -1) + 1;
+          const remainingStops = totalStops - currentStop;
+
+          output += '\n\n---\n';
+          output += `*Replay: ${meta.messageCount} messages, ~${meta.tokenCount} tokens`;
           if (meta.stoppingPointType) {
-            output += `, stopped at: ${meta.stoppingPointType}`;
+            output += ` | Stopped at: ${meta.stoppingPointType}`;
           }
-          output += ']*';
+          if (totalStops > 0) {
+            output += ` | Stopping point ${currentStop} of ${totalStops}`;
+          }
+          output += '*';
+
+          // Add instruction for loading more context if there are more stopping points
+          if (remainingStops > 0) {
+            output += `\n\n> **Need more context?** Call \`ben_ten_loadMore\` to load back to the previous stopping point (${remainingStops} more available).`;
+          }
         }
       }
     }

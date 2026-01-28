@@ -34,6 +34,20 @@ export type StoppingPointType =
 export interface ReplayOptions {
   /** Maximum tokens to include in replay */
   maxTokens?: number;
+  /** Starting stopping point index to use (0 = most recent, 1 = previous, etc.) */
+  stopPointIndex?: number;
+  /** Pre-computed stopping points to reuse (avoids re-scanning) */
+  stoppingPoints?: StoppingPoint[];
+}
+
+/**
+ * Information about a stopping point in the transcript.
+ */
+export interface StoppingPoint {
+  /** Index in the messages array */
+  index: number;
+  /** Type of stopping point */
+  type: StoppingPointType;
 }
 
 /**
@@ -48,6 +62,12 @@ export interface ReplayResult {
   messageCount: number;
   /** Type of stopping point that was detected */
   stoppingPointType: StoppingPointType | null;
+  /** All stopping points found in the transcript (ordered from most recent to oldest) */
+  allStoppingPoints: StoppingPoint[];
+  /** Index of the current stopping point being used (-1 if none) */
+  currentStopIndex: number;
+  /** Starting message index for this replay */
+  startMessageIndex: number;
 }
 
 /**
@@ -247,6 +267,33 @@ const formatEntry = (entry: TranscriptEntry): string => {
 };
 
 /**
+ * Finds all stopping points in the transcript.
+ *
+ * @param messages - Transcript entries to scan
+ * @returns Array of stopping points ordered from most recent to oldest
+ */
+export const findAllStoppingPoints = (
+  messages: TranscriptEntry[],
+): StoppingPoint[] => {
+  const stoppingPoints: StoppingPoint[] = [];
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const entry = messages[i];
+    if (!entry) continue;
+
+    if (isGitCommit(entry)) {
+      stoppingPoints.push({ index: i, type: 'git_commit' });
+    } else if (isTaskCompletion(entry)) {
+      stoppingPoints.push({ index: i, type: 'task_completion' });
+    } else if (isSemanticMarker(entry)) {
+      stoppingPoints.push({ index: i, type: 'semantic_marker' });
+    }
+  }
+
+  return stoppingPoints;
+};
+
+/**
  * Creates a replay service for generating conversation replays.
  *
  * @param deps - Dependencies including logger
@@ -261,10 +308,12 @@ export const createReplayService = (deps: ReplayServiceDeps): ReplayService => {
   return {
     generateReplay(messages, options = {}) {
       const maxTokens = options.maxTokens ?? 50000;
+      const stopPointIndex = options.stopPointIndex ?? 0;
 
       logger.debug('Generating replay', {
         messageCount: messages.length,
         maxTokens,
+        stopPointIndex,
       });
 
       // Handle empty messages
@@ -274,45 +323,39 @@ export const createReplayService = (deps: ReplayServiceDeps): ReplayService => {
           tokenCount: 0,
           messageCount: 0,
           stoppingPointType: null,
+          allStoppingPoints: [],
+          currentStopIndex: -1,
+          startMessageIndex: 0,
         });
       }
 
-      // Find stopping point by iterating backwards
+      // Find all stopping points (reuse if provided)
+      const allStoppingPoints =
+        options.stoppingPoints ?? findAllStoppingPoints(messages);
+
+      logger.debug('Found stopping points', {
+        count: allStoppingPoints.length,
+        points: allStoppingPoints.map((p) => ({
+          index: p.index,
+          type: p.type,
+        })),
+      });
+
+      // Determine which stopping point to use
       let stoppingIndex = -1;
       let stoppingPointType: StoppingPointType | null = null;
-      let weakStoppingIndex = -1;
+      let currentStopIndex = -1;
 
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const entry = messages[i];
-        if (!entry) continue;
-
-        // Git commit is highest priority - stop immediately
-        if (isGitCommit(entry)) {
-          stoppingIndex = i;
-          stoppingPointType = 'git_commit';
-          logger.debug('Found git commit stopping point', { index: i });
-          break;
+      if (
+        allStoppingPoints.length > 0 &&
+        stopPointIndex < allStoppingPoints.length
+      ) {
+        const stopPoint = allStoppingPoints[stopPointIndex];
+        if (stopPoint) {
+          stoppingIndex = stopPoint.index;
+          stoppingPointType = stopPoint.type;
+          currentStopIndex = stopPointIndex;
         }
-
-        // Task completion is second priority - stop immediately
-        if (isTaskCompletion(entry)) {
-          stoppingIndex = i;
-          stoppingPointType = 'task_completion';
-          logger.debug('Found task completion stopping point', { index: i });
-          break;
-        }
-
-        // Semantic marker is weak - remember but continue looking
-        if (weakStoppingIndex === -1 && isSemanticMarker(entry)) {
-          weakStoppingIndex = i;
-          logger.debug('Found semantic marker', { index: i });
-        }
-      }
-
-      // Use weak stopping point if no strong one found
-      if (stoppingIndex === -1 && weakStoppingIndex !== -1) {
-        stoppingIndex = weakStoppingIndex;
-        stoppingPointType = 'semantic_marker';
       }
 
       // Collect messages after stopping point
@@ -358,10 +401,7 @@ export const createReplayService = (deps: ReplayServiceDeps): ReplayService => {
       }
 
       // If budget was exceeded while processing, update type
-      if (budgetExceeded && stoppingIndex !== -1) {
-        // We had a stopping point but also hit budget
-        // Keep the stopping point type
-      } else if (budgetExceeded) {
+      if (budgetExceeded && stoppingIndex === -1) {
         stoppingPointType = 'token_budget';
       }
 
@@ -380,12 +420,17 @@ export const createReplayService = (deps: ReplayServiceDeps): ReplayService => {
         tokenCount: estimateTokens(replay),
         messageCount: replayMessages.length,
         stoppingPointType,
+        allStoppingPoints,
+        currentStopIndex,
+        startMessageIndex: startIndex,
       };
 
       logger.debug('Generated replay', {
         tokenCount: result.tokenCount,
         messageCount: result.messageCount,
         stoppingPointType: result.stoppingPointType,
+        currentStopIndex: result.currentStopIndex,
+        totalStoppingPoints: allStoppingPoints.length,
       });
 
       return ok(result);

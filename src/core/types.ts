@@ -133,6 +133,23 @@ export const ConversationHistorySchema = z.object({
 export type ConversationHistory = z.infer<typeof ConversationHistorySchema>;
 
 /**
+ * Schema for a stopping point in the transcript.
+ */
+export const StoppingPointSchema = z.object({
+  /** Index in the messages array */
+  index: z.number(),
+  /** Type of stopping point */
+  type: z.enum([
+    'git_commit',
+    'task_completion',
+    'semantic_marker',
+    'token_budget',
+  ]),
+});
+
+export type StoppingPointData = z.infer<typeof StoppingPointSchema>;
+
+/**
  * Schema for replay metadata.
  * Tracks information about the generated conversation replay.
  */
@@ -147,6 +164,12 @@ export const ReplayMetadataSchema = z.object({
     .nullable(),
   /** When the replay was generated */
   generatedAt: z.number(),
+  /** All stopping points found in the transcript (most recent first) */
+  allStoppingPoints: z.array(StoppingPointSchema).optional(),
+  /** Index of current stopping point being used (-1 if none) */
+  currentStopIndex: z.number().optional(),
+  /** Starting message index for current replay */
+  startMessageIndex: z.number().optional(),
 });
 
 export type ReplayMetadata = z.infer<typeof ReplayMetadataSchema>;

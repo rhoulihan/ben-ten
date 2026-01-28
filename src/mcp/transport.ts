@@ -187,11 +187,15 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
               messageCount: replayResult.value.messageCount,
               stoppingPointType: replayResult.value.stoppingPointType,
               generatedAt: Date.now(),
+              allStoppingPoints: replayResult.value.allStoppingPoints,
+              currentStopIndex: replayResult.value.currentStopIndex,
+              startMessageIndex: replayResult.value.startMessageIndex,
             };
             logger.info('Generated conversation replay', {
               tokenCount: replayResult.value.tokenCount,
               messageCount: replayResult.value.messageCount,
               stoppingPointType: replayResult.value.stoppingPointType,
+              totalStoppingPoints: replayResult.value.allStoppingPoints.length,
             });
           }
         } else {
@@ -383,6 +387,161 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
               null,
               2,
             ),
+          },
+        ],
+      };
+    },
+  );
+
+  // Register ben_ten_loadMore tool
+  server.registerTool(
+    'ben_ten_loadMore',
+    {
+      description:
+        'Load more conversation context by going back to the previous stopping point. Call repeatedly to load progressively more context.',
+      inputSchema: {},
+    },
+    async () => {
+      // Load existing context
+      const loadResult = await contextService.loadContext();
+      if (!loadResult.ok) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'No context found. Save context first with ben_ten_save.',
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const context = loadResult.value;
+
+      // Check if we have replay metadata with stopping points
+      if (
+        !context.replayMetadata?.allStoppingPoints ||
+        context.replayMetadata.allStoppingPoints.length === 0
+      ) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'No stopping points available. The conversation has been fully loaded.',
+            },
+          ],
+        };
+      }
+
+      const currentIndex = context.replayMetadata.currentStopIndex ?? -1;
+      const nextIndex = currentIndex + 1;
+
+      if (nextIndex >= context.replayMetadata.allStoppingPoints.length) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Already at the earliest stopping point (${context.replayMetadata.allStoppingPoints.length} total). No more context available.`,
+            },
+          ],
+        };
+      }
+
+      // We need the conversation to regenerate the replay
+      if (!context.conversation?.messages) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'No conversation history found. Cannot load more context.',
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Get config for token budget
+      const configResult = await configService.loadConfig();
+      const config = configResult.ok ? configResult.value : DEFAULT_CONFIG;
+      const maxTokens = Math.floor(
+        (config.contextWindowSize * config.maxReplayPercent) / 100,
+      );
+
+      // Generate new replay with next stopping point
+      const replayResult = replayService.generateReplay(
+        context.conversation.messages,
+        {
+          maxTokens,
+          stopPointIndex: nextIndex,
+          stoppingPoints: context.replayMetadata.allStoppingPoints,
+        },
+      );
+
+      if (!replayResult.ok) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Error generating replay: ${replayResult.error.message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Update context with new replay
+      const updatedContext: ContextData = {
+        ...context,
+        updatedAt: Date.now(),
+        conversationReplay: replayResult.value.replay,
+        replayMetadata: {
+          tokenCount: replayResult.value.tokenCount,
+          messageCount: replayResult.value.messageCount,
+          stoppingPointType: replayResult.value.stoppingPointType,
+          generatedAt: Date.now(),
+          allStoppingPoints: replayResult.value.allStoppingPoints,
+          currentStopIndex: replayResult.value.currentStopIndex,
+          startMessageIndex: replayResult.value.startMessageIndex,
+        },
+      };
+
+      const saveResult = await contextService.saveContext(updatedContext);
+      if (!saveResult.ok) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Error saving updated context: ${saveResult.error.message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const remainingStops =
+        replayResult.value.allStoppingPoints.length -
+        replayResult.value.currentStopIndex -
+        1;
+
+      // Return the additional context
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: [
+              '# Additional Context Loaded',
+              '',
+              `**Stopping Point:** ${replayResult.value.currentStopIndex + 1} of ${replayResult.value.allStoppingPoints.length}`,
+              `**Type:** ${replayResult.value.stoppingPointType || 'none'}`,
+              `**Messages:** ${replayResult.value.messageCount}`,
+              `**Tokens:** ~${replayResult.value.tokenCount}`,
+              '',
+              remainingStops > 0
+                ? `*${remainingStops} more stopping point${remainingStops > 1 ? 's' : ''} available. Call ben_ten_loadMore again to load more.*`
+                : '*This is the earliest stopping point.*',
+              '',
+              replayResult.value.replay,
+            ].join('\n'),
           },
         ],
       };

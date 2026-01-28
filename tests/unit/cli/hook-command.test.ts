@@ -142,5 +142,122 @@ describe('hook-command', () => {
         );
       }
     });
+
+    it('includes replay metadata in output', async () => {
+      const existingContext: ContextData = {
+        version: '2.0.0',
+        createdAt: 1000,
+        updatedAt: Date.now() - 60000, // 1 minute ago
+        sessionId: 'previous-session',
+        summary: 'Summary',
+        conversationReplay: '## Recent Conversation\n\n**User:** Hello',
+        replayMetadata: {
+          tokenCount: 100,
+          messageCount: 5,
+          stoppingPointType: 'git_commit',
+          generatedAt: Date.now(),
+          allStoppingPoints: [
+            { index: 10, type: 'git_commit' },
+            { index: 5, type: 'task_completion' },
+          ],
+          currentStopIndex: 0,
+          startMessageIndex: 11,
+        },
+      };
+      await fs.writeFile(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
+        JSON.stringify(existingContext),
+      );
+
+      const input = JSON.stringify({
+        session_id: 'test-session',
+        transcript_path: '/tmp/test.jsonl',
+        cwd: projectDir,
+        hook_event_name: 'SessionStart',
+        source: 'startup',
+      });
+
+      const result = await runHookCommand(input, { fs });
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.output).toContain('Recent Conversation');
+        expect(result.value.output).toContain('Stopped at: git_commit');
+        expect(result.value.output).toContain('Stopping point 1 of 2');
+      }
+    });
+
+    it('shows ben_ten_loadMore instruction when more stopping points available', async () => {
+      const existingContext: ContextData = {
+        version: '2.0.0',
+        createdAt: 1000,
+        updatedAt: Date.now() - 60000,
+        sessionId: 'previous-session',
+        summary: 'Summary',
+        conversationReplay: '## Recent Conversation\n\n**User:** Hello',
+        replayMetadata: {
+          tokenCount: 100,
+          messageCount: 5,
+          stoppingPointType: 'git_commit',
+          generatedAt: Date.now(),
+          allStoppingPoints: [
+            { index: 10, type: 'git_commit' },
+            { index: 5, type: 'task_completion' },
+            { index: 2, type: 'semantic_marker' },
+          ],
+          currentStopIndex: 0,
+          startMessageIndex: 11,
+        },
+      };
+      await fs.writeFile(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
+        JSON.stringify(existingContext),
+      );
+
+      const input = JSON.stringify({
+        session_id: 'test-session',
+        transcript_path: '/tmp/test.jsonl',
+        cwd: projectDir,
+        hook_event_name: 'SessionStart',
+        source: 'startup',
+      });
+
+      const result = await runHookCommand(input, { fs });
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.output).toContain('ben_ten_loadMore');
+        expect(result.value.output).toContain('2 more available');
+      }
+    });
+
+    it('shows human-readable time ago', async () => {
+      const existingContext: ContextData = {
+        version: '2.0.0',
+        createdAt: 1000,
+        updatedAt: Date.now() - 2 * 60 * 60 * 1000, // 2 hours ago
+        sessionId: 'previous-session',
+        summary: 'Summary',
+      };
+      await fs.writeFile(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
+        JSON.stringify(existingContext),
+      );
+
+      const input = JSON.stringify({
+        session_id: 'test-session',
+        transcript_path: '/tmp/test.jsonl',
+        cwd: projectDir,
+        hook_event_name: 'SessionStart',
+        source: 'startup',
+      });
+
+      const result = await runHookCommand(input, { fs });
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.output).toContain('2 hours ago');
+      }
+    });
   });
 });

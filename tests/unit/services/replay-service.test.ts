@@ -5,8 +5,10 @@ import { isOk } from '../../../src/infrastructure/result.js';
 import {
   type ReplayOptions,
   type ReplayResult,
+  type StoppingPoint,
   createReplayService,
   estimateTokens,
+  findAllStoppingPoints,
   isGitCommit,
   isSemanticMarker,
   isTaskCompletion,
@@ -178,6 +180,69 @@ describe('ReplayService', () => {
     });
   });
 
+  describe('findAllStoppingPoints', () => {
+    it('finds all git commits', () => {
+      const messages: TranscriptEntry[] = [
+        createUserEntry('First'),
+        createAssistantEntry([
+          createToolUseBlock('Bash', { command: 'git commit -m "first"' }),
+        ]),
+        createUserEntry('Second'),
+        createAssistantEntry([
+          createToolUseBlock('Bash', { command: 'git commit -m "second"' }),
+        ]),
+        createUserEntry('Third'),
+      ];
+
+      const points = findAllStoppingPoints(messages);
+
+      expect(points).toHaveLength(2);
+      // Most recent first
+      expect(points[0]?.index).toBe(3);
+      expect(points[0]?.type).toBe('git_commit');
+      expect(points[1]?.index).toBe(1);
+      expect(points[1]?.type).toBe('git_commit');
+    });
+
+    it('finds mixed stopping point types', () => {
+      const messages: TranscriptEntry[] = [
+        createUserEntry('First'),
+        createAssistantEntry('Done! First task complete.'), // semantic marker
+        createUserEntry('Second'),
+        createAssistantEntry([
+          createToolUseBlock('TaskUpdate', {
+            taskId: '1',
+            status: 'completed',
+          }),
+        ]), // task completion
+        createUserEntry('Third'),
+        createAssistantEntry([
+          createToolUseBlock('Bash', { command: 'git commit -m "test"' }),
+        ]), // git commit
+        createUserEntry('Fourth'),
+      ];
+
+      const points = findAllStoppingPoints(messages);
+
+      expect(points).toHaveLength(3);
+      // Ordered from most recent to oldest
+      expect(points[0]?.type).toBe('git_commit');
+      expect(points[1]?.type).toBe('task_completion');
+      expect(points[2]?.type).toBe('semantic_marker');
+    });
+
+    it('returns empty array when no stopping points', () => {
+      const messages: TranscriptEntry[] = [
+        createUserEntry('Hello'),
+        createAssistantEntry('Hi there'),
+      ];
+
+      const points = findAllStoppingPoints(messages);
+
+      expect(points).toHaveLength(0);
+    });
+  });
+
   describe('generateReplay', () => {
     it('returns empty replay for empty messages', () => {
       const result = service.generateReplay([]);
@@ -187,6 +252,8 @@ describe('ReplayService', () => {
         expect(result.value.replay).toBe('');
         expect(result.value.messageCount).toBe(0);
         expect(result.value.stoppingPointType).toBeNull();
+        expect(result.value.allStoppingPoints).toHaveLength(0);
+        expect(result.value.currentStopIndex).toBe(-1);
       }
     });
 
@@ -324,6 +391,137 @@ describe('ReplayService', () => {
         // Should include all messages since no stopping point
         expect(result.value.replay).toContain('Question 1');
         expect(result.value.replay).toContain('Answer 2');
+      }
+    });
+
+    it('includes allStoppingPoints in result', () => {
+      const messages: TranscriptEntry[] = [
+        createUserEntry('First'),
+        createAssistantEntry([
+          createToolUseBlock('Bash', { command: 'git commit -m "first"' }),
+        ]),
+        createUserEntry('Second'),
+        createAssistantEntry([
+          createToolUseBlock('Bash', { command: 'git commit -m "second"' }),
+        ]),
+        createUserEntry('Third'),
+      ];
+
+      const result = service.generateReplay(messages);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.allStoppingPoints).toHaveLength(2);
+        expect(result.value.currentStopIndex).toBe(0);
+        expect(result.value.startMessageIndex).toBe(4); // After second commit (index 3)
+      }
+    });
+
+    it('uses stopPointIndex to go to previous stopping point', () => {
+      const messages: TranscriptEntry[] = [
+        createUserEntry('First'),
+        createAssistantEntry([
+          createToolUseBlock('Bash', { command: 'git commit -m "first"' }),
+        ]),
+        createUserEntry('Second'),
+        createAssistantEntry([
+          createToolUseBlock('Bash', { command: 'git commit -m "second"' }),
+        ]),
+        createUserEntry('Third'),
+        createAssistantEntry('Third response'),
+      ];
+
+      // First call - uses most recent stopping point (index 0)
+      const result1 = service.generateReplay(messages);
+      expect(isOk(result1)).toBe(true);
+      if (isOk(result1)) {
+        expect(result1.value.currentStopIndex).toBe(0);
+        expect(result1.value.replay).toContain('Third');
+        expect(result1.value.replay).not.toContain('Second');
+      }
+
+      // Second call - uses previous stopping point (index 1)
+      const result2 = service.generateReplay(messages, { stopPointIndex: 1 });
+      expect(isOk(result2)).toBe(true);
+      if (isOk(result2)) {
+        expect(result2.value.currentStopIndex).toBe(1);
+        expect(result2.value.replay).toContain('Second');
+        expect(result2.value.replay).toContain('Third');
+        expect(result2.value.replay).not.toContain('First');
+      }
+    });
+
+    it('reuses provided stoppingPoints to avoid re-scanning', () => {
+      const messages: TranscriptEntry[] = [
+        createUserEntry('First'),
+        createAssistantEntry([
+          createToolUseBlock('Bash', { command: 'git commit -m "first"' }),
+        ]),
+        createUserEntry('Second'),
+        createAssistantEntry([
+          createToolUseBlock('Bash', { command: 'git commit -m "second"' }),
+        ]),
+        createUserEntry('Third'),
+      ];
+
+      // Get stopping points from first call
+      const result1 = service.generateReplay(messages);
+      expect(isOk(result1)).toBe(true);
+      if (!isOk(result1)) return;
+
+      const stoppingPoints = result1.value.allStoppingPoints;
+
+      // Reuse stopping points in second call
+      const result2 = service.generateReplay(messages, {
+        stopPointIndex: 1,
+        stoppingPoints,
+      });
+
+      expect(isOk(result2)).toBe(true);
+      if (isOk(result2)) {
+        expect(result2.value.allStoppingPoints).toBe(stoppingPoints); // Same reference
+        expect(result2.value.currentStopIndex).toBe(1);
+      }
+    });
+
+    it('handles stopPointIndex beyond available stopping points', () => {
+      const messages: TranscriptEntry[] = [
+        createUserEntry('First'),
+        createAssistantEntry([
+          createToolUseBlock('Bash', { command: 'git commit -m "only"' }),
+        ]),
+        createUserEntry('Second'),
+      ];
+
+      // Try to use stopPointIndex 5 when only 1 stopping point exists
+      const result = service.generateReplay(messages, { stopPointIndex: 5 });
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        // Should fall back to no stopping point behavior
+        expect(result.value.currentStopIndex).toBe(-1);
+        expect(result.value.stoppingPointType).toBeNull();
+      }
+    });
+
+    it('tracks startMessageIndex correctly', () => {
+      const messages: TranscriptEntry[] = [
+        createUserEntry('0'),
+        createAssistantEntry('1'),
+        createUserEntry('2'),
+        createAssistantEntry([
+          createToolUseBlock('Bash', { command: 'git commit -m "test"' }),
+        ]), // index 3
+        createUserEntry('4'),
+        createAssistantEntry('5'),
+      ];
+
+      const result = service.generateReplay(messages);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.startMessageIndex).toBe(4); // After commit at index 3
+        expect(result.value.messageCount).toBe(2); // Messages at index 4 and 5
       }
     });
   });
