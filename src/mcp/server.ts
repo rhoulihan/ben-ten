@@ -134,12 +134,17 @@ export const createBenTenServer = (deps: BenTenServerDeps): BenTenServer => {
           keyFiles: {
             type: 'array',
             items: { type: 'string' },
-            description: 'List of key files in the project',
+            description: 'List of key files',
           },
           activeTasks: {
             type: 'array',
             items: { type: 'string' },
             description: 'List of active tasks',
+          },
+          transcriptPath: {
+            type: 'string',
+            description:
+              'Path to the transcript JSONL file for extracting conversation history, file references, and tool calls',
           },
         },
         required: ['sessionId', 'summary'],
@@ -213,6 +218,9 @@ export const createBenTenServer = (deps: BenTenServerDeps): BenTenServer => {
           const summary = args.summary as string;
           const keyFiles = args.keyFiles as string[] | undefined;
           const activeTasks = args.activeTasks as string[] | undefined;
+          const providedTranscriptPath = args.transcriptPath as
+            | string
+            | undefined;
 
           // Preserve createdAt if updating
           let createdAt = Date.now();
@@ -234,45 +242,57 @@ export const createBenTenServer = (deps: BenTenServerDeps): BenTenServer => {
             activeTasks,
           };
 
-          // Try to enrich context from transcript
-          if (await contextService.hasMetadata()) {
+          // Determine transcript path: prefer provided param, then metadata, then auto-discover
+          let transcriptPath = providedTranscriptPath;
+          if (!transcriptPath && (await contextService.hasMetadata())) {
             const metadataResult = await contextService.loadMetadata();
             if (metadataResult.ok && metadataResult.value.transcriptPath) {
-              const transcriptPath = metadataResult.value.transcriptPath;
-              const transcriptResult =
-                await transcriptService.parseTranscript(transcriptPath);
+              transcriptPath = metadataResult.value.transcriptPath;
+            }
+          }
+          if (!transcriptPath) {
+            const discoverResult =
+              await transcriptService.discoverTranscriptPath(projectDir);
+            if (discoverResult.ok && discoverResult.value) {
+              transcriptPath = discoverResult.value;
+            }
+          }
 
-              if (transcriptResult.ok) {
-                const conversation = transcriptResult.value;
-                contextData.conversation = conversation;
+          // Enrich context from transcript if available
+          if (transcriptPath) {
+            const transcriptResult =
+              await transcriptService.parseTranscript(transcriptPath);
 
-                // Extract file references
-                const extractedFiles =
-                  transcriptService.extractFileReferences(conversation);
-                if (extractedFiles.length > 0) {
-                  const now = Date.now();
-                  contextData.files = extractedFiles.map(
-                    (path): FileMetadata => ({
-                      path,
-                      lastAccessed: now,
-                      accessCount: 1,
-                    }),
-                  );
-                }
+            if (transcriptResult.ok) {
+              const conversation = transcriptResult.value;
+              contextData.conversation = conversation;
 
-                // Extract tool history
-                const toolCalls =
-                  transcriptService.extractToolCalls(conversation);
-                if (toolCalls.length > 0) {
-                  contextData.toolHistory = toolCalls;
-                }
-              } else {
-                // Log warning but continue without enrichment
-                logger.warn('Failed to parse transcript for enrichment', {
-                  path: transcriptPath,
-                  error: transcriptResult.error.message,
-                });
+              // Extract file references
+              const extractedFiles =
+                transcriptService.extractFileReferences(conversation);
+              if (extractedFiles.length > 0) {
+                const now = Date.now();
+                contextData.files = extractedFiles.map(
+                  (path): FileMetadata => ({
+                    path,
+                    lastAccessed: now,
+                    accessCount: 1,
+                  }),
+                );
               }
+
+              // Extract tool history
+              const toolCalls =
+                transcriptService.extractToolCalls(conversation);
+              if (toolCalls.length > 0) {
+                contextData.toolHistory = toolCalls;
+              }
+            } else {
+              // Log warning but continue without enrichment
+              logger.warn('Failed to parse transcript for enrichment', {
+                path: transcriptPath,
+                error: transcriptResult.error.message,
+              });
             }
           }
 

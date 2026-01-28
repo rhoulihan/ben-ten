@@ -20,6 +20,17 @@ import { type Result, err, ok } from '../infrastructure/result.js';
  */
 export interface TranscriptService {
   /**
+   * Discover the most recent transcript file for a project.
+   * Looks in ~/.claude/projects/<project-path>/ for .jsonl files.
+   *
+   * @param projectDir - The project directory path
+   * @returns Result with transcript path or null if not found
+   */
+  discoverTranscriptPath(
+    projectDir: string,
+  ): Promise<Result<string | null, BenTenError>>;
+
+  /**
    * Parse a transcript JSONL file into conversation history.
    *
    * @param path - Path to the transcript file
@@ -93,7 +104,79 @@ export const createTranscriptService = (
     }
   };
 
+  /**
+   * Convert a project directory path to Claude Code's project path format.
+   * Example: /mnt/c/Users/rickh/GitHub/Ben10 -> -mnt-c-Users-rickh-GitHub-Ben10
+   */
+  const toClaudeProjectPath = (projectDir: string): string => {
+    // Replace all path separators with dashes, remove leading slash
+    return projectDir.replace(/^\//, '').replace(/\//g, '-');
+  };
+
+  /**
+   * Get the Claude Code projects directory.
+   * Returns ~/.claude/projects on Unix-like systems.
+   */
+  const getClaudeProjectsDir = (): string => {
+    const home = process.env.HOME || process.env.USERPROFILE || '';
+    return `${home}/.claude/projects`;
+  };
+
   const service: TranscriptService = {
+    async discoverTranscriptPath(projectDir) {
+      const claudeProjectPath = toClaudeProjectPath(projectDir);
+      const projectsDir = getClaudeProjectsDir();
+      const transcriptDir = `${projectsDir}/${claudeProjectPath}`;
+
+      logger.debug('Discovering transcript', { projectDir, transcriptDir });
+
+      // Check if directory exists
+      if (!(await fs.exists(transcriptDir))) {
+        logger.debug('Claude projects directory not found', { transcriptDir });
+        return ok(null);
+      }
+
+      // List all .jsonl files in the directory
+      const readdirResult = await fs.readdir(transcriptDir);
+      if (!readdirResult.ok) {
+        logger.warn('Failed to read Claude projects directory', {
+          transcriptDir,
+          error: readdirResult.error.message,
+        });
+        return ok(null);
+      }
+
+      const jsonlFiles = readdirResult.value.filter((f) =>
+        f.endsWith('.jsonl'),
+      );
+      if (jsonlFiles.length === 0) {
+        logger.debug('No transcript files found', { transcriptDir });
+        return ok(null);
+      }
+
+      // Find the most recently modified transcript file
+      let latestFile: string | null = null;
+      let latestMtime = 0;
+
+      for (const file of jsonlFiles) {
+        const filePath = `${transcriptDir}/${file}`;
+        const statResult = await fs.stat(filePath);
+        if (statResult.ok) {
+          const mtime = statResult.value.mtime.getTime();
+          if (mtime > latestMtime) {
+            latestMtime = mtime;
+            latestFile = filePath;
+          }
+        }
+      }
+
+      if (latestFile) {
+        logger.info('Discovered transcript', { path: latestFile });
+      }
+
+      return ok(latestFile);
+    },
+
     async parseTranscript(path) {
       logger.debug('Parsing transcript', { path });
 
