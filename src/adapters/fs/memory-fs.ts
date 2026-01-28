@@ -36,6 +36,11 @@ export interface RmOptions {
 export interface FileSystem {
   readFile(path: string): Promise<Result<string, BenTenError>>;
   writeFile(path: string, content: string): Promise<Result<void, BenTenError>>;
+  readFileBuffer(path: string): Promise<Result<Buffer, BenTenError>>;
+  writeFileBuffer(
+    path: string,
+    content: Buffer,
+  ): Promise<Result<void, BenTenError>>;
   exists(path: string): Promise<boolean>;
   mkdir(
     path: string,
@@ -49,6 +54,7 @@ export interface FileSystem {
 interface FsNode {
   type: 'file' | 'directory';
   content?: string;
+  bufferContent?: Buffer;
   mtime: Date;
 }
 
@@ -133,6 +139,46 @@ export const createMemoryFs = (
       const normalized = normalizePath(path);
       ensureParentDirs(normalized);
       nodes.set(normalized, { type: 'file', content, mtime: new Date() });
+      return ok(undefined);
+    },
+
+    async readFileBuffer(path) {
+      const normalized = normalizePath(path);
+      const node = nodes.get(normalized);
+
+      if (!node) {
+        return err(
+          createError(ErrorCode.FS_NOT_FOUND, `File not found: ${path}`, {
+            path,
+          }),
+        );
+      }
+
+      if (node.type !== 'file') {
+        return err(
+          createError(
+            ErrorCode.FS_READ_ERROR,
+            `Cannot read directory as file: ${path}`,
+            { path },
+          ),
+        );
+      }
+
+      // Return buffer content if available, otherwise convert string content
+      if (node.bufferContent !== undefined) {
+        return ok(node.bufferContent);
+      }
+      return ok(Buffer.from(node.content ?? ''));
+    },
+
+    async writeFileBuffer(path, content) {
+      const normalized = normalizePath(path);
+      ensureParentDirs(normalized);
+      nodes.set(normalized, {
+        type: 'file',
+        bufferContent: content,
+        mtime: new Date(),
+      });
       return ok(undefined);
     },
 
@@ -270,10 +316,18 @@ export const createMemoryFs = (
         );
       }
 
+      // Calculate size from either buffer or string content
+      let size = 0;
+      if (node.bufferContent !== undefined) {
+        size = node.bufferContent.length;
+      } else if (node.content !== undefined) {
+        size = node.content.length;
+      }
+
       return ok({
         isFile: node.type === 'file',
         isDirectory: node.type === 'directory',
-        size: node.content?.length ?? 0,
+        size,
         mtime: node.mtime,
       });
     },

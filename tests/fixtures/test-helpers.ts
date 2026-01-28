@@ -8,7 +8,10 @@ import {
   type Logger,
   createLogger,
 } from '../../src/infrastructure/logger.js';
-import { BEN10_DIR, CONTEXT_FILE } from '../../src/services/context-service.js';
+import {
+  BEN10_DIR,
+  CONTEXT_FILE_LEGACY,
+} from '../../src/services/context-service.js';
 
 /**
  * Test environment with common dependencies.
@@ -55,7 +58,11 @@ export const setupContextFile = async (
 ): Promise<void> => {
   const ben10Dir = `${projectDir}/${BEN10_DIR}`;
   await fs.mkdir(ben10Dir, { recursive: true });
-  await fs.writeFile(`${ben10Dir}/${CONTEXT_FILE}`, JSON.stringify(context));
+  // Write to legacy JSON format for test fixtures
+  await fs.writeFile(
+    `${ben10Dir}/${CONTEXT_FILE_LEGACY}`,
+    JSON.stringify(context),
+  );
 };
 
 /**

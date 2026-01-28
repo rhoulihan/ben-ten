@@ -13,6 +13,7 @@ import {
 import {
   BEN10_DIR,
   CONTEXT_FILE,
+  CONTEXT_FILE_LEGACY,
 } from '../../../src/services/context-service.js';
 
 describe('BenTenServer', () => {
@@ -96,8 +97,9 @@ describe('BenTenServer', () => {
         sessionId: 'test-session',
         summary: 'Test summary for status',
       };
+      // Write to legacy JSON format for test fixture
       await fs.writeFile(
-        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
         JSON.stringify(contextData),
       );
 
@@ -139,8 +141,9 @@ describe('BenTenServer', () => {
         sessionId: 'old-session',
         summary: 'Old summary',
       };
+      // Write existing context to legacy format
       await fs.writeFile(
-        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
         JSON.stringify(existingContext),
       );
 
@@ -149,13 +152,11 @@ describe('BenTenServer', () => {
         summary: 'Updated summary',
       });
 
-      const content = await fs.readFile(
-        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
-      );
-      if (isOk(content)) {
-        const saved = JSON.parse(content.value) as ContextData;
-        expect(saved.createdAt).toBe(1000);
-        expect(saved.sessionId).toBe('updated-session');
+      // Load the context through the service to verify createdAt was preserved
+      const loadResult = await server.callTool('ben_ten_load', {});
+      if (isOk(loadResult)) {
+        expect(loadResult.value.createdAt).toBe(1000);
+        expect(loadResult.value.sessionId).toBe('updated-session');
       }
     });
   });
@@ -176,8 +177,9 @@ describe('BenTenServer', () => {
         summary: 'Summary to load',
         keyFiles: ['src/index.ts'],
       };
+      // Write to legacy JSON format for test fixture
       await fs.writeFile(
-        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
         JSON.stringify(contextData),
       );
 
@@ -210,8 +212,9 @@ describe('BenTenServer', () => {
         sessionId: 'to-clear',
         summary: 'Will be cleared',
       };
+      // Write to legacy JSON format for test fixture
       await fs.writeFile(
-        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
         JSON.stringify(contextData),
       );
 
@@ -222,10 +225,15 @@ describe('BenTenServer', () => {
         expect(result.value.cleared).toBe(true);
       }
 
-      const exists = await fs.exists(
+      // Both new and legacy formats should be deleted
+      const newExists = await fs.exists(
         `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
       );
-      expect(exists).toBe(false);
+      const legacyExists = await fs.exists(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
+      );
+      expect(newExists).toBe(false);
+      expect(legacyExists).toBe(false);
     });
   });
 
@@ -267,8 +275,9 @@ describe('BenTenServer', () => {
         sessionId: 'resource-test',
         summary: 'Summary for resource test',
       };
+      // Write to legacy JSON format for test fixture
       await fs.writeFile(
-        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
         JSON.stringify(contextData),
       );
 

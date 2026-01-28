@@ -3,7 +3,7 @@
 [![CI](https://github.com/rhoulihan/ben-ten/actions/workflows/ci.yml/badge.svg)](https://github.com/rhoulihan/ben-ten/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-230%20passing-brightgreen)](https://github.com/rhoulihan/ben-ten)
+[![Tests](https://img.shields.io/badge/tests-277%20passing-brightgreen)](https://github.com/rhoulihan/ben-ten)
 
 **Photographic memory for Claude Code** - Named after Ben Tennyson's legendary photographic memory.
 
@@ -13,6 +13,7 @@ Ben-Ten persists context across Claude Code sessions, allowing Claude to remembe
 
 - **Automatic Context Persistence** - Hooks into Claude Code lifecycle events to save context automatically
 - **Post-Compaction Recovery** - Captures compacted summaries so context survives memory limits
+- **LZ4 Compression** - Context files are compressed with LZ4 for ~90% size reduction
 - **MCP Server** - Exposes tools and resources for programmatic context management
 - **Zero Configuration** - Works out of the box with sensible defaults
 
@@ -140,7 +141,7 @@ This creates a `.ben-ten/` directory in your project. This step is optional—Be
 
 Once installed, Ben-Ten works like this:
 
-1. **Start Claude Code** - Context is loaded from `.ben-ten/context.json` if it exists
+1. **Start Claude Code** - Context is loaded from `.ben-ten/context.ctx` if it exists
 2. **Work with Claude** - Claude can call `ben-ten_save` to save context at any time
 3. **End session** - Saved context persists for next time
 4. **Resume later** - Previous context is restored automatically
@@ -151,12 +152,12 @@ Ben-Ten integrates with Claude Code through hooks and MCP:
 
 | Component | Action |
 |-----------|--------|
-| `SessionStart` hook | Loads existing context from `.ben-ten/context.json` |
-| `ben-ten_save` MCP tool | Saves context (summary, keyFiles, activeTasks) |
+| `SessionStart` hook | Loads existing context from `.ben-ten/context.ctx` |
+| `ben-ten_save` MCP tool | Saves context (summary, keyFiles, activeTasks) with LZ4 compression |
 | `ben-ten_load` MCP tool | Loads context programmatically |
 | `ben-ten_clear` MCP tool | Deletes context |
 
-Context is stored in `.ben-ten/context.json` at your project root.
+Context is stored in `.ben-ten/context.ctx` (LZ4-compressed binary format) at your project root. Legacy `context.json` files are automatically migrated.
 
 ## CLI Commands
 
@@ -228,6 +229,20 @@ interface ContextData {
 
 The `conversation`, `files`, and `toolHistory` fields are automatically populated when Ben-Ten parses the Claude Code transcript during save.
 
+### Binary File Format
+
+Context files (`.ctx`) use a custom binary format with LZ4 compression:
+
+```
+[4 bytes: "BT10" magic header]
+[1 byte: format version]
+[1 byte: compression type (1 = LZ4)]
+[4 bytes: uncompressed size]
+[N bytes: LZ4-compressed JSON data]
+```
+
+This achieves ~90% compression on typical context data while maintaining fast read/write speeds.
+
 ## Development
 
 ```bash
@@ -262,7 +277,13 @@ src/
 ├── core/            # Core types and schemas
 ├── infrastructure/  # Cross-cutting concerns (errors, logging, Result type)
 ├── mcp/             # MCP server implementation
-└── services/        # Business logic (context, hooks)
+├── services/        # Business logic
+│   ├── context-service.ts      # Context persistence
+│   ├── compression-service.ts  # LZ4 compression wrapper
+│   ├── serializer-service.ts   # Binary format serialization
+│   ├── hook-handler.ts         # Claude Code hook handling
+│   └── transcript-service.ts   # Transcript parsing
+└── types/           # External type declarations
 ```
 
 ### Key Design Decisions

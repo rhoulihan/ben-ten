@@ -6,6 +6,7 @@ import { isOk } from '../../../src/infrastructure/result.js';
 import {
   BEN10_DIR,
   CONTEXT_FILE,
+  CONTEXT_FILE_LEGACY,
 } from '../../../src/services/context-service.js';
 import { createHookHandler } from '../../../src/services/hook-handler.js';
 import { createContextData } from '../../fixtures/context-factory.js';
@@ -143,10 +144,15 @@ describe('Hook lifecycle integration', () => {
         expect(result.value.contextCleared).toBe(true);
       }
 
-      const exists = await fs.exists(
+      // Both new and legacy formats should be deleted
+      const newExists = await fs.exists(
         `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
       );
-      expect(exists).toBe(false);
+      const legacyExists = await fs.exists(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
+      );
+      expect(newExists).toBe(false);
+      expect(legacyExists).toBe(false);
     });
 
     it('succeeds even when no context exists', async () => {
@@ -204,8 +210,8 @@ describe('Hook lifecycle integration', () => {
 
       await handler.handlePreCompact(input);
 
-      // Context should still exist unchanged
-      const contextPath = `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`;
+      // Context should still exist unchanged (in legacy format from setupContextFile)
+      const contextPath = `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`;
       const exists = await fs.exists(contextPath);
       expect(exists).toBe(true);
     });

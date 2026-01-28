@@ -14,28 +14,36 @@ Ben-Ten automatically saves and restores Claude Code's context window state acro
 | Build | tsup | Zero-config, fast ESM/CJS |
 | Test | Vitest | Native ESM, TypeScript-first |
 | Lint/Format | Biome | Fast, unified tooling |
-| Serialization | MessagePack | Fast binary, hot path |
-| Compression | LZ4 (hot) / ZSTD (archive) | Speed vs size trade-off |
+| Serialization | JSON + LZ4 | Fast compression, ~90% size reduction |
+| Future | MessagePack + LZ4 | Even faster binary serialization |
 
 ## Architecture
 
 ```
 src/
-├── core/           # Pure domain logic, no I/O
-│   ├── context/    # ContextState, serialization
-│   ├── snapshot/   # Compaction snapshots
-│   └── crypto/     # Hashing, checksums
+├── core/           # Pure domain logic
+│   └── types.ts    # Zod schemas, ContextData, HookInput
 ├── adapters/       # External world (ports)
-│   ├── fs/         # File system operations
-│   ├── claude/     # Claude Code integration
-│   └── config/     # Configuration loading
+│   └── fs/         # File system operations (memory + node)
 ├── cli/            # Command handlers
-│   ├── commands/   # save, restore, status, etc.
-│   └── ui/         # Terminal output formatting
+│   ├── hook-command.ts  # Hook CLI entry
+│   └── index.ts         # CLI exports
 ├── infrastructure/ # Cross-cutting concerns
 │   ├── logger.ts   # Structured logging
-│   └── errors.ts   # Error types
-└── index.ts        # Entry point
+│   ├── errors.ts   # Error codes and types
+│   └── result.ts   # Result<T, E> type utilities
+├── mcp/            # MCP server
+│   ├── server.ts   # Tool and resource handlers
+│   └── transport.ts # stdio transport
+├── services/       # Business logic
+│   ├── context-service.ts      # Context persistence
+│   ├── compression-service.ts  # LZ4 wrapper
+│   ├── serializer-service.ts   # Binary format (JSON + LZ4)
+│   ├── hook-handler.ts         # Hook event handling
+│   └── transcript-service.ts   # Transcript parsing
+├── types/          # External type declarations
+│   └── lz4js.d.ts  # lz4js types
+└── index.ts        # Public API exports
 ```
 
 **Patterns:**
@@ -184,13 +192,23 @@ interface CompactionSnapshot {
 
 ```
 .ben-ten/
-├── current.ctx               # Active context (MessagePack + LZ4)
-├── current.ctx.meta          # Metadata (JSON)
-├── checkpoints/              # Rolling crash recovery
-├── history/                  # Archived sessions (gzip)
-├── compaction-snapshots/     # Pre-compaction saves (ZSTD)
-└── config.yaml               # Project-specific Ben-Ten settings
+├── context.ctx               # Active context (JSON + LZ4 compressed)
+├── context.json              # Legacy format (auto-migrated to .ctx)
+├── metadata.json             # Session metadata (JSON)
+└── config.yaml               # Project-specific Ben-Ten settings (future)
 ```
+
+### Binary Format (context.ctx)
+
+```
+[4 bytes: "BT10" magic header]
+[1 byte: FORMAT_VERSION (0x01)]
+[1 byte: COMPRESSION_TYPE (0x01 = LZ4)]
+[4 bytes: UNCOMPRESSED_SIZE (uint32 LE)]
+[N bytes: LZ4-compressed JSON data]
+```
+
+Achieves ~90% compression on typical context data.
 
 ## Do Not
 

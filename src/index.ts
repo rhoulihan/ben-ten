@@ -55,9 +55,15 @@ export {
 export {
   createContextService,
   createHookHandler,
+  createCompressionService,
+  createSerializerService,
   BEN10_DIR,
   CONTEXT_FILE,
+  CONTEXT_FILE_LEGACY,
   METADATA_FILE,
+  MAGIC_HEADER,
+  FORMAT_VERSION,
+  COMPRESSION_TYPE,
   type ContextService,
   type ContextServiceDeps,
   type HookHandler,
@@ -65,6 +71,9 @@ export {
   type SessionStartResult,
   type PreCompactResult,
   type HookResult,
+  type CompressionService,
+  type SerializerService,
+  type FormatType,
 } from './services/index.js';
 
 // MCP Server

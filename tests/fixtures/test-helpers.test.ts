@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ContextData } from '../../src/core/types.js';
 import { isOk } from '../../src/infrastructure/result.js';
-import { BEN10_DIR, CONTEXT_FILE } from '../../src/services/context-service.js';
+import {
+  BEN10_DIR,
+  CONTEXT_FILE_LEGACY,
+} from '../../src/services/context-service.js';
 import { createContextData } from './context-factory.js';
 import {
   createTestEnv,
@@ -46,7 +49,7 @@ describe('test-helpers', () => {
       await setupContextFile(fs, projectDir, context);
 
       const exists = await fs.exists(
-        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
       );
       expect(exists).toBe(true);
     });
@@ -58,7 +61,7 @@ describe('test-helpers', () => {
       await setupContextFile(fs, projectDir, context);
 
       const result = await fs.readFile(
-        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
       );
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {

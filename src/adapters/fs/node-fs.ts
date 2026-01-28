@@ -82,6 +82,28 @@ export const createNodeFs = (): FileSystem => {
       }
     },
 
+    async readFileBuffer(filePath) {
+      try {
+        const content = await fs.readFile(filePath);
+        return ok(content);
+      } catch (error) {
+        return err(mapError(error, filePath));
+      }
+    },
+
+    async writeFileBuffer(filePath, content) {
+      try {
+        // Ensure parent directory exists
+        const dir = path.dirname(filePath);
+        await fs.mkdir(dir, { recursive: true });
+
+        await fs.writeFile(filePath, content);
+        return ok(undefined);
+      } catch (error) {
+        return err(mapError(error, filePath));
+      }
+    },
+
     async exists(filePath) {
       try {
         await fs.access(filePath);

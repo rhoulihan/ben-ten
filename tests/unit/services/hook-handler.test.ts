@@ -9,6 +9,7 @@ import { isOk } from '../../../src/infrastructure/result.js';
 import {
   BEN10_DIR,
   CONTEXT_FILE,
+  CONTEXT_FILE_LEGACY,
   METADATA_FILE,
 } from '../../../src/services/context-service.js';
 import {
@@ -87,7 +88,7 @@ describe('HookHandler', () => {
           summary: 'Previous session summary',
         };
         await fs.writeFile(
-          `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+          `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
           JSON.stringify(existingContext),
         );
 
@@ -118,7 +119,7 @@ describe('HookHandler', () => {
           summary: 'Resumed session context',
         };
         await fs.writeFile(
-          `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+          `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
           JSON.stringify(existingContext),
         );
 
@@ -148,7 +149,7 @@ describe('HookHandler', () => {
           summary: 'Existing context before compaction',
         };
         await fs.writeFile(
-          `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+          `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
           JSON.stringify(existingContext),
         );
 
@@ -195,7 +196,7 @@ describe('HookHandler', () => {
           summary: 'Old context to clear',
         };
         await fs.writeFile(
-          `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+          `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
           JSON.stringify(existingContext),
         );
 
@@ -213,7 +214,7 @@ describe('HookHandler', () => {
 
         // Verify context was deleted
         const contextExists = await fs.exists(
-          `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+          `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
         );
         expect(contextExists).toBe(false);
       });

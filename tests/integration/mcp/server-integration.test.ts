@@ -10,6 +10,7 @@ import {
 import {
   BEN10_DIR,
   CONTEXT_FILE,
+  CONTEXT_FILE_LEGACY,
   METADATA_FILE,
 } from '../../../src/services/context-service.js';
 import { createContextData } from '../../fixtures/context-factory.js';
@@ -49,13 +50,11 @@ describe('MCP Server integration', () => {
 
       expect(isOk(result)).toBe(true);
 
-      const fileResult = await fs.readFile(
-        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
-      );
-      expect(isOk(fileResult)).toBe(true);
-      if (isOk(fileResult)) {
-        const saved = JSON.parse(fileResult.value) as ContextData;
-        expect(saved.keyFiles).toEqual([
+      // Load through service to verify (file is now compressed)
+      const loadResult = await server.callTool('ben_ten_load', {});
+      expect(isOk(loadResult)).toBe(true);
+      if (isOk(loadResult)) {
+        expect(loadResult.value.keyFiles).toEqual([
           'src/index.ts',
           'src/main.ts',
           'README.md',
@@ -72,13 +71,11 @@ describe('MCP Server integration', () => {
 
       expect(isOk(result)).toBe(true);
 
-      const fileResult = await fs.readFile(
-        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
-      );
-      expect(isOk(fileResult)).toBe(true);
-      if (isOk(fileResult)) {
-        const saved = JSON.parse(fileResult.value) as ContextData;
-        expect(saved.activeTasks).toEqual([
+      // Load through service to verify (file is now compressed)
+      const loadResult = await server.callTool('ben_ten_load', {});
+      expect(isOk(loadResult)).toBe(true);
+      if (isOk(loadResult)) {
+        expect(loadResult.value.activeTasks).toEqual([
           'Implement feature X',
           'Write tests',
           'Update docs',
@@ -96,14 +93,12 @@ describe('MCP Server integration', () => {
 
       expect(isOk(result)).toBe(true);
 
-      const fileResult = await fs.readFile(
-        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
-      );
-      expect(isOk(fileResult)).toBe(true);
-      if (isOk(fileResult)) {
-        const saved = JSON.parse(fileResult.value) as ContextData;
-        expect(saved.keyFiles).toEqual([]);
-        expect(saved.activeTasks).toEqual([]);
+      // Load through service to verify (file is now compressed)
+      const loadResult = await server.callTool('ben_ten_load', {});
+      expect(isOk(loadResult)).toBe(true);
+      if (isOk(loadResult)) {
+        expect(loadResult.value.keyFiles).toEqual([]);
+        expect(loadResult.value.activeTasks).toEqual([]);
       }
     });
 
@@ -117,14 +112,12 @@ describe('MCP Server integration', () => {
 
       expect(isOk(result)).toBe(true);
 
-      const fileResult = await fs.readFile(
-        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
-      );
-      expect(isOk(fileResult)).toBe(true);
-      if (isOk(fileResult)) {
-        const saved = JSON.parse(fileResult.value) as ContextData;
-        expect(saved.keyFiles).toEqual(['src/app.ts']);
-        expect(saved.activeTasks).toEqual(['Task 1', 'Task 2']);
+      // Load through service to verify (file is now compressed)
+      const loadResult = await server.callTool('ben_ten_load', {});
+      expect(isOk(loadResult)).toBe(true);
+      if (isOk(loadResult)) {
+        expect(loadResult.value.keyFiles).toEqual(['src/app.ts']);
+        expect(loadResult.value.activeTasks).toEqual(['Task 1', 'Task 2']);
       }
     });
   });

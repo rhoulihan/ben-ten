@@ -4,6 +4,7 @@ export {
   type ContextServiceDeps,
   BEN10_DIR,
   CONTEXT_FILE,
+  CONTEXT_FILE_LEGACY,
   METADATA_FILE,
 } from './context-service.js';
 
@@ -15,3 +16,17 @@ export {
   type PreCompactResult,
   type HookResult,
 } from './hook-handler.js';
+
+export {
+  createCompressionService,
+  type CompressionService,
+} from './compression-service.js';
+
+export {
+  createSerializerService,
+  type SerializerService,
+  type FormatType,
+  MAGIC_HEADER,
+  FORMAT_VERSION,
+  COMPRESSION_TYPE,
+} from './serializer-service.js';

@@ -235,4 +235,114 @@ describe('MemoryFs', () => {
       expect(isOk(resultA) && resultA.value).toBe('content a');
     });
   });
+
+  describe('readFileBuffer', () => {
+    it('reads file content as Buffer', async () => {
+      await fs.writeFileBuffer('/test.bin', Buffer.from('binary data'));
+
+      const result = await fs.readFileBuffer('/test.bin');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(Buffer.isBuffer(result.value)).toBe(true);
+        expect(result.value.toString()).toBe('binary data');
+      }
+    });
+
+    it('returns error for non-existent file', async () => {
+      const result = await fs.readFileBuffer('/missing.bin');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.code).toBe(ErrorCode.FS_NOT_FOUND);
+      }
+    });
+
+    it('returns error when trying to read directory as buffer', async () => {
+      await fs.mkdir('/mydir');
+
+      const result = await fs.readFileBuffer('/mydir');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.code).toBe(ErrorCode.FS_READ_ERROR);
+      }
+    });
+
+    it('handles binary data with null bytes', async () => {
+      const binaryData = Buffer.from([0x00, 0x01, 0x02, 0xff, 0x00, 0xfe]);
+      await fs.writeFileBuffer('/binary.bin', binaryData);
+
+      const result = await fs.readFileBuffer('/binary.bin');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toEqual(binaryData);
+      }
+    });
+  });
+
+  describe('writeFileBuffer', () => {
+    it('writes Buffer content to file', async () => {
+      const buffer = Buffer.from([0x00, 0x01, 0x02, 0xff]);
+
+      const writeResult = await fs.writeFileBuffer('/test.bin', buffer);
+      expect(isOk(writeResult)).toBe(true);
+
+      const readResult = await fs.readFileBuffer('/test.bin');
+      expect(isOk(readResult)).toBe(true);
+      if (isOk(readResult)) {
+        expect(readResult.value).toEqual(buffer);
+      }
+    });
+
+    it('creates parent directories if needed', async () => {
+      const buffer = Buffer.from('nested');
+
+      const writeResult = await fs.writeFileBuffer('/a/b/c/test.bin', buffer);
+      expect(isOk(writeResult)).toBe(true);
+
+      const exists = await fs.exists('/a/b/c/test.bin');
+      expect(exists).toBe(true);
+    });
+
+    it('handles empty buffer', async () => {
+      const buffer = Buffer.alloc(0);
+
+      const writeResult = await fs.writeFileBuffer('/empty.bin', buffer);
+      expect(isOk(writeResult)).toBe(true);
+
+      const readResult = await fs.readFileBuffer('/empty.bin');
+      expect(isOk(readResult)).toBe(true);
+      if (isOk(readResult)) {
+        expect(readResult.value.length).toBe(0);
+      }
+    });
+
+    it('overwrites existing file', async () => {
+      await fs.writeFileBuffer('/test.bin', Buffer.from('first'));
+      await fs.writeFileBuffer('/test.bin', Buffer.from('second'));
+
+      const readResult = await fs.readFileBuffer('/test.bin');
+      expect(isOk(readResult)).toBe(true);
+      if (isOk(readResult)) {
+        expect(readResult.value.toString()).toBe('second');
+      }
+    });
+  });
+
+  describe('stat with buffer files', () => {
+    it('returns correct size for buffer files', async () => {
+      const buffer = Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04]);
+      await fs.writeFileBuffer('/test.bin', buffer);
+
+      const result = await fs.stat('/test.bin');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.size).toBe(5);
+        expect(result.value.isFile).toBe(true);
+      }
+    });
+  });
 });

@@ -12,12 +12,16 @@ import {
 } from '../infrastructure/errors.js';
 import type { Logger } from '../infrastructure/logger.js';
 import { type Result, err, ok } from '../infrastructure/result.js';
+import { createSerializerService } from './serializer-service.js';
 
 /** Directory name for Ben-Ten storage */
 export const BEN10_DIR = '.ben-ten';
 
-/** Context data file name */
-export const CONTEXT_FILE = 'context.json';
+/** Context data file name (compressed binary format) */
+export const CONTEXT_FILE = 'context.ctx';
+
+/** Legacy context file name (JSON format) */
+export const CONTEXT_FILE_LEGACY = 'context.json';
 
 /** Metadata file name */
 export const METADATA_FILE = 'metadata.json';
@@ -70,83 +74,135 @@ export const createContextService = (
   deps: ContextServiceDeps,
 ): ContextService => {
   const { fs, logger, projectDir } = deps;
+  const serializer = createSerializerService();
 
   const ben10Dir = `${projectDir}/${BEN10_DIR}`;
   const contextPath = `${ben10Dir}/${CONTEXT_FILE}`;
+  const legacyContextPath = `${ben10Dir}/${CONTEXT_FILE_LEGACY}`;
   const metadataPath = `${ben10Dir}/${METADATA_FILE}`;
 
   const service: ContextService = {
     async hasContext() {
-      return fs.exists(contextPath);
+      // Check for new compressed format first, then legacy JSON
+      if (await fs.exists(contextPath)) {
+        return true;
+      }
+      return fs.exists(legacyContextPath);
     },
 
     async loadContext() {
       logger.debug('Loading context', { path: contextPath });
 
-      // Check if file exists
-      if (!(await fs.exists(contextPath))) {
-        return err(
-          createError(ErrorCode.CONTEXT_NOT_FOUND, 'No context file found', {
+      // Try new compressed format first
+      if (await fs.exists(contextPath)) {
+        const readResult = await fs.readFileBuffer(contextPath);
+        if (!readResult.ok) {
+          return err(
+            createError(
+              ErrorCode.CONTEXT_CORRUPTED,
+              'Failed to read context file',
+              { path: contextPath, originalError: readResult.error.message },
+            ),
+          );
+        }
+
+        const deserializeResult = serializer.deserialize(readResult.value);
+        if (!deserializeResult.ok) {
+          logger.warn('Failed to deserialize context', {
             path: contextPath,
-          }),
-        );
-      }
+            error: deserializeResult.error.message,
+          });
+          return err(
+            createError(
+              ErrorCode.CONTEXT_CORRUPTED,
+              'Context file is corrupted',
+              {
+                path: contextPath,
+                originalError: deserializeResult.error.message,
+              },
+            ),
+          );
+        }
 
-      // Read file
-      const readResult = await fs.readFile(contextPath);
-      if (!readResult.ok) {
-        return err(
-          createError(
-            ErrorCode.CONTEXT_CORRUPTED,
-            'Failed to read context file',
-            { path: contextPath, originalError: readResult.error.message },
-          ),
-        );
-      }
-
-      // Parse JSON
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(readResult.value);
-      } catch (e) {
-        logger.warn('Failed to parse context JSON', {
-          path: contextPath,
-          error: e instanceof Error ? e.message : String(e),
+        logger.info('Context loaded successfully', {
+          sessionId: deserializeResult.value.sessionId,
+          summaryLength: deserializeResult.value.summary.length,
         });
-        return err(
-          createError(
-            ErrorCode.CONTEXT_CORRUPTED,
-            'Context file contains invalid JSON',
-            { path: contextPath },
-          ),
-        );
+
+        return ok(deserializeResult.value);
       }
 
-      // Validate structure
-      const validateResult = parseContextData(parsed);
-      if (!validateResult.ok) {
-        logger.warn('Context file has invalid structure', {
-          path: contextPath,
-          errors: validateResult.error.details,
+      // Try legacy JSON format
+      if (await fs.exists(legacyContextPath)) {
+        logger.debug('Loading legacy JSON context', {
+          path: legacyContextPath,
         });
-        return err(
-          createError(
-            ErrorCode.CONTEXT_CORRUPTED,
-            'Context file has invalid structure',
-            {
-              path: contextPath,
-              validationErrors: validateResult.error.details,
-            },
-          ),
-        );
+
+        const readResult = await fs.readFile(legacyContextPath);
+        if (!readResult.ok) {
+          return err(
+            createError(
+              ErrorCode.CONTEXT_CORRUPTED,
+              'Failed to read legacy context file',
+              {
+                path: legacyContextPath,
+                originalError: readResult.error.message,
+              },
+            ),
+          );
+        }
+
+        // Parse JSON
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(readResult.value);
+        } catch (e) {
+          logger.warn('Failed to parse legacy context JSON', {
+            path: legacyContextPath,
+            error: e instanceof Error ? e.message : String(e),
+          });
+          return err(
+            createError(
+              ErrorCode.CONTEXT_CORRUPTED,
+              'Legacy context file contains invalid JSON',
+              { path: legacyContextPath },
+            ),
+          );
+        }
+
+        // Validate structure
+        const validateResult = parseContextData(parsed);
+        if (!validateResult.ok) {
+          logger.warn('Legacy context file has invalid structure', {
+            path: legacyContextPath,
+            errors: validateResult.error.details,
+          });
+          return err(
+            createError(
+              ErrorCode.CONTEXT_CORRUPTED,
+              'Legacy context file has invalid structure',
+              {
+                path: legacyContextPath,
+                validationErrors: validateResult.error.details,
+              },
+            ),
+          );
+        }
+
+        logger.info('Context loaded successfully', {
+          sessionId: validateResult.value.sessionId,
+          summaryLength: validateResult.value.summary.length,
+        });
+
+        return ok(validateResult.value);
       }
 
-      logger.info('Context loaded successfully', {
-        sessionId: validateResult.value.sessionId,
-        summaryLength: validateResult.value.summary.length,
-      });
-
-      return ok(validateResult.value);
+      // No context file found
+      return err(
+        createError(ErrorCode.CONTEXT_NOT_FOUND, 'No context file found', {
+          path: contextPath,
+        }),
+      );
     },
 
     async saveContext(context) {
@@ -167,9 +223,21 @@ export const createContextService = (
         );
       }
 
-      // Write context file
-      const content = JSON.stringify(context, null, 2);
-      const writeResult = await fs.writeFile(contextPath, content);
+      // Serialize to compressed format
+      const serializeResult = serializer.serialize(context);
+      if (!serializeResult.ok) {
+        return err(
+          createError(ErrorCode.FS_WRITE_ERROR, 'Failed to serialize context', {
+            originalError: serializeResult.error.message,
+          }),
+        );
+      }
+
+      // Write compressed context file
+      const writeResult = await fs.writeFileBuffer(
+        contextPath,
+        serializeResult.value,
+      );
       if (!writeResult.ok) {
         return err(
           createError(
@@ -183,7 +251,7 @@ export const createContextService = (
       logger.info('Context saved successfully', {
         path: contextPath,
         sessionId: context.sessionId,
-        size: content.length,
+        size: serializeResult.value.length,
       });
 
       return ok(undefined);
@@ -192,23 +260,39 @@ export const createContextService = (
     async deleteContext() {
       logger.debug('Deleting context', { path: contextPath });
 
-      if (!(await fs.exists(contextPath))) {
-        logger.debug('No context to delete');
-        return ok(undefined);
+      // Delete new format if exists
+      if (await fs.exists(contextPath)) {
+        const rmResult = await fs.rm(contextPath);
+        if (!rmResult.ok) {
+          return err(
+            createError(
+              ErrorCode.FS_WRITE_ERROR,
+              'Failed to delete context file',
+              { path: contextPath, originalError: rmResult.error.message },
+            ),
+          );
+        }
+        logger.info('Context deleted', { path: contextPath });
       }
 
-      const rmResult = await fs.rm(contextPath);
-      if (!rmResult.ok) {
-        return err(
-          createError(
-            ErrorCode.FS_WRITE_ERROR,
-            'Failed to delete context file',
-            { path: contextPath, originalError: rmResult.error.message },
-          ),
-        );
+      // Delete legacy format if exists
+      if (await fs.exists(legacyContextPath)) {
+        const rmResult = await fs.rm(legacyContextPath);
+        if (!rmResult.ok) {
+          return err(
+            createError(
+              ErrorCode.FS_WRITE_ERROR,
+              'Failed to delete legacy context file',
+              {
+                path: legacyContextPath,
+                originalError: rmResult.error.message,
+              },
+            ),
+          );
+        }
+        logger.info('Legacy context deleted', { path: legacyContextPath });
       }
 
-      logger.info('Context deleted', { path: contextPath });
       return ok(undefined);
     },
 

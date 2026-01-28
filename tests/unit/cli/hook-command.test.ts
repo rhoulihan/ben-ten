@@ -9,6 +9,7 @@ import { isErr, isOk } from '../../../src/infrastructure/result.js';
 import {
   BEN10_DIR,
   CONTEXT_FILE,
+  CONTEXT_FILE_LEGACY,
 } from '../../../src/services/context-service.js';
 
 describe('hook-command', () => {
@@ -118,8 +119,9 @@ describe('hook-command', () => {
         sessionId: 'previous-session',
         summary: 'Previous session summary for stdout',
       };
+      // Write to legacy JSON format for test fixture
       await fs.writeFile(
-        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
         JSON.stringify(existingContext),
       );
 

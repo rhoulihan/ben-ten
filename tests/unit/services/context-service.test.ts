@@ -10,6 +10,7 @@ import { isErr, isOk } from '../../../src/infrastructure/result.js';
 import {
   BEN10_DIR,
   CONTEXT_FILE,
+  CONTEXT_FILE_LEGACY,
   type ContextService,
   METADATA_FILE,
   createContextService,
@@ -29,7 +30,8 @@ describe('ContextService', () => {
   describe('constants', () => {
     it('exports correct directory and file names', () => {
       expect(BEN10_DIR).toBe('.ben-ten');
-      expect(CONTEXT_FILE).toBe('context.json');
+      expect(CONTEXT_FILE).toBe('context.ctx');
+      expect(CONTEXT_FILE_LEGACY).toBe('context.json');
       expect(METADATA_FILE).toBe('metadata.json');
     });
   });
@@ -79,8 +81,9 @@ describe('ContextService', () => {
         summary: 'Test summary content',
         keyFiles: ['src/index.ts'],
       };
+      // Write to legacy JSON path for this test
       await fs.writeFile(
-        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
         JSON.stringify(contextData),
       );
 
@@ -356,6 +359,186 @@ describe('ContextService', () => {
       const result = await service.hasMetadata();
 
       expect(result).toBe(true);
+    });
+  });
+
+  describe('compression', () => {
+    it('saves context in compressed binary format', async () => {
+      const contextData: ContextData = {
+        version: '2.0.0',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        sessionId: 'test-compression',
+        summary: 'A'.repeat(1000), // Compressible data
+      };
+
+      await service.saveContext(contextData);
+
+      // File should be at .ctx path, not .json
+      const ctxExists = await fs.exists(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+      );
+      expect(ctxExists).toBe(true);
+
+      // Read raw file and check it starts with magic header
+      const rawResult = await fs.readFileBuffer(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+      );
+      expect(isOk(rawResult)).toBe(true);
+      if (isOk(rawResult)) {
+        const magic = rawResult.value.subarray(0, 4).toString('ascii');
+        expect(magic).toBe('BT10');
+      }
+    });
+
+    it('achieves compression for large context', async () => {
+      const contextData: ContextData = {
+        version: '2.0.0',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        sessionId: 'test-compression-ratio',
+        summary: 'This is a test. '.repeat(500),
+      };
+
+      await service.saveContext(contextData);
+
+      const statResult = await fs.stat(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+      );
+      expect(isOk(statResult)).toBe(true);
+      if (isOk(statResult)) {
+        const jsonSize = JSON.stringify(contextData).length;
+        // Compressed file should be smaller than JSON
+        expect(statResult.value.size).toBeLessThan(jsonSize);
+      }
+    });
+
+    it('loads compressed context correctly', async () => {
+      const contextData: ContextData = {
+        version: '2.0.0',
+        createdAt: 1234567890,
+        updatedAt: 1234567899,
+        sessionId: 'test-load-compressed',
+        summary: 'Test compressed roundtrip',
+        keyFiles: ['/a.ts', '/b.ts'],
+      };
+
+      await service.saveContext(contextData);
+      const loadResult = await service.loadContext();
+
+      expect(isOk(loadResult)).toBe(true);
+      if (isOk(loadResult)) {
+        expect(loadResult.value).toEqual(contextData);
+      }
+    });
+  });
+
+  describe('legacy JSON migration', () => {
+    it('loads legacy JSON format and returns context', async () => {
+      const legacyContext: ContextData = {
+        version: '1.0.0',
+        createdAt: 1000,
+        updatedAt: 2000,
+        sessionId: 'legacy-session',
+        summary: 'Legacy context content',
+      };
+
+      // Write to legacy JSON path
+      await fs.mkdir(`${projectDir}/${BEN10_DIR}`, { recursive: true });
+      await fs.writeFile(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
+        JSON.stringify(legacyContext),
+      );
+
+      const loadResult = await service.loadContext();
+
+      expect(isOk(loadResult)).toBe(true);
+      if (isOk(loadResult)) {
+        expect(loadResult.value.sessionId).toBe('legacy-session');
+      }
+    });
+
+    it('prefers compressed format over legacy JSON when both exist', async () => {
+      const legacyContext: ContextData = {
+        version: '1.0.0',
+        createdAt: 1000,
+        updatedAt: 2000,
+        sessionId: 'legacy-session',
+        summary: 'Legacy content',
+      };
+      const newContext: ContextData = {
+        version: '2.0.0',
+        createdAt: 3000,
+        updatedAt: 4000,
+        sessionId: 'new-session',
+        summary: 'New content',
+      };
+
+      // Write legacy JSON
+      await fs.mkdir(`${projectDir}/${BEN10_DIR}`, { recursive: true });
+      await fs.writeFile(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
+        JSON.stringify(legacyContext),
+      );
+
+      // Write new compressed format
+      await service.saveContext(newContext);
+
+      const loadResult = await service.loadContext();
+
+      expect(isOk(loadResult)).toBe(true);
+      if (isOk(loadResult)) {
+        expect(loadResult.value.sessionId).toBe('new-session');
+      }
+    });
+
+    it('hasContext returns true for legacy JSON format', async () => {
+      const legacyContext: ContextData = {
+        version: '1.0.0',
+        createdAt: 1000,
+        updatedAt: 2000,
+        sessionId: 'legacy',
+        summary: 'Legacy',
+      };
+
+      await fs.mkdir(`${projectDir}/${BEN10_DIR}`, { recursive: true });
+      await fs.writeFile(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
+        JSON.stringify(legacyContext),
+      );
+
+      const result = await service.hasContext();
+
+      expect(result).toBe(true);
+    });
+
+    it('deleteContext removes both legacy and new format files', async () => {
+      const context: ContextData = {
+        version: '2.0.0',
+        createdAt: 1000,
+        updatedAt: 2000,
+        sessionId: 'to-delete',
+        summary: 'Delete me',
+      };
+
+      // Create both files
+      await fs.mkdir(`${projectDir}/${BEN10_DIR}`, { recursive: true });
+      await fs.writeFile(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
+        JSON.stringify(context),
+      );
+      await service.saveContext(context);
+
+      await service.deleteContext();
+
+      const legacyExists = await fs.exists(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
+      );
+      const newExists = await fs.exists(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+      );
+      expect(legacyExists).toBe(false);
+      expect(newExists).toBe(false);
     });
   });
 });
