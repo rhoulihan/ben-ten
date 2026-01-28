@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   createAssistantEntry,
+  createProgressEntry,
   createSummaryEntry,
-  createSystemEntry,
+  createTextBlock,
+  createToolUseBlock,
   createTranscript,
   createUserEntry,
 } from './transcript-factory.js';
@@ -18,11 +20,25 @@ describe('transcript-factory', () => {
   });
 
   describe('createAssistantEntry', () => {
-    it('creates an assistant type entry', () => {
+    it('creates an assistant type entry from string', () => {
       const entry = createAssistantEntry('Hello, I am an assistant');
 
       expect(entry.type).toBe('assistant');
-      expect(entry.content).toBe('Hello, I am an assistant');
+      expect(entry.message.role).toBe('assistant');
+      expect(entry.message.content).toHaveLength(1);
+      expect(entry.message.content[0].type).toBe('text');
+    });
+
+    it('creates an assistant entry from content blocks', () => {
+      const entry = createAssistantEntry([
+        createTextBlock('Some text'),
+        createToolUseBlock('Read', { file: 'test.ts' }),
+      ]);
+
+      expect(entry.type).toBe('assistant');
+      expect(entry.message.content).toHaveLength(2);
+      expect(entry.message.content[0].type).toBe('text');
+      expect(entry.message.content[1].type).toBe('tool_use');
     });
   });
 
@@ -31,16 +47,17 @@ describe('transcript-factory', () => {
       const entry = createUserEntry('Hello, assistant');
 
       expect(entry.type).toBe('user');
-      expect(entry.content).toBe('Hello, assistant');
+      expect(entry.message.role).toBe('user');
+      expect(entry.message.content).toBe('Hello, assistant');
     });
   });
 
-  describe('createSystemEntry', () => {
-    it('creates a system type entry', () => {
-      const entry = createSystemEntry('Tool result: success');
+  describe('createProgressEntry', () => {
+    it('creates a progress type entry', () => {
+      const entry = createProgressEntry({ hookEvent: 'SessionStart' });
 
-      expect(entry.type).toBe('system');
-      expect(entry.content).toBe('Tool result: success');
+      expect(entry.type).toBe('progress');
+      expect(entry.data).toEqual({ hookEvent: 'SessionStart' });
     });
   });
 
@@ -56,11 +73,11 @@ describe('transcript-factory', () => {
 
       const first = JSON.parse(lines[0]);
       expect(first.type).toBe('assistant');
-      expect(first.content).toBe('First message');
+      expect(first.message.content[0].text).toBe('First message');
 
       const second = JSON.parse(lines[1]);
       expect(second.type).toBe('assistant');
-      expect(second.content).toBe('Second message');
+      expect(second.message.content[0].text).toBe('Second message');
     });
 
     it('handles mixed entry types', () => {

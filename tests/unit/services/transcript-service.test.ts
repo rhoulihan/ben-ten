@@ -13,8 +13,9 @@ import {
 import { setupTranscriptFile } from '../../fixtures/test-helpers.js';
 import {
   createAssistantEntry,
+  createProgressEntry,
   createSummaryEntry,
-  createSystemEntry,
+  createToolUseBlock,
   createTranscript,
   createUserEntry,
 } from '../../fixtures/transcript-factory.js';
@@ -105,10 +106,10 @@ describe('TranscriptService', () => {
       }
     });
 
-    it('parses system entries', async () => {
+    it('parses progress entries', async () => {
       const content = createTranscript([
         createUserEntry('Run the build'),
-        createSystemEntry('Build completed successfully'),
+        createProgressEntry({ hookEvent: 'SessionStart' }),
         createAssistantEntry('The build succeeded!'),
       ]);
       await setupTranscriptFile(fs, transcriptPath, content);
@@ -118,7 +119,7 @@ describe('TranscriptService', () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.messages).toHaveLength(3);
-        expect(result.value.messages[1].type).toBe('system');
+        expect(result.value.messages[1].type).toBe('progress');
       }
     });
   });
@@ -127,11 +128,8 @@ describe('TranscriptService', () => {
     it('extracts file paths from backticks', () => {
       const history = {
         messages: [
-          {
-            type: 'assistant' as const,
-            content: 'I read `src/index.ts` and `src/types.ts`',
-          },
-          { type: 'user' as const, content: 'Check `tests/unit/foo.test.ts`' },
+          createAssistantEntry('I read `src/index.ts` and `src/types.ts`'),
+          createUserEntry('Check `tests/unit/foo.test.ts`'),
         ],
         messageCount: 2,
       };
@@ -146,11 +144,8 @@ describe('TranscriptService', () => {
     it('deduplicates file references', () => {
       const history = {
         messages: [
-          { type: 'assistant' as const, content: 'Reading `src/index.ts`' },
-          {
-            type: 'assistant' as const,
-            content: 'Still working on `src/index.ts`',
-          },
+          createAssistantEntry('Reading `src/index.ts`'),
+          createAssistantEntry('Still working on `src/index.ts`'),
         ],
         messageCount: 2,
       };
@@ -162,10 +157,7 @@ describe('TranscriptService', () => {
 
     it('returns empty array for no file references', () => {
       const history = {
-        messages: [
-          { type: 'user' as const, content: 'Hello' },
-          { type: 'assistant' as const, content: 'Hi there' },
-        ],
+        messages: [createUserEntry('Hello'), createAssistantEntry('Hi there')],
         messageCount: 2,
       };
 
@@ -176,12 +168,7 @@ describe('TranscriptService', () => {
 
     it('handles summary entries without crashing', () => {
       const history = {
-        messages: [
-          {
-            type: 'summary' as const,
-            summary: 'Session summary with `file.ts`',
-          },
-        ],
+        messages: [createSummaryEntry('Session summary with `file.ts`')],
         messageCount: 1,
       };
 
@@ -192,14 +179,15 @@ describe('TranscriptService', () => {
   });
 
   describe('extractToolCalls', () => {
-    it('extracts tool calls from assistant content', () => {
+    it('extracts tool_use blocks from assistant content', () => {
       const history = {
         messages: [
-          {
-            type: 'assistant' as const,
-            content: 'Using Read tool to read the file',
-          },
-          { type: 'assistant' as const, content: 'Using Write tool to save' },
+          createAssistantEntry([
+            createToolUseBlock('Read', { file_path: '/src/index.ts' }),
+          ]),
+          createAssistantEntry([
+            createToolUseBlock('Write', { file_path: '/output.txt' }),
+          ]),
         ],
         messageCount: 2,
       };
@@ -212,10 +200,7 @@ describe('TranscriptService', () => {
 
     it('returns empty array when no tool calls found', () => {
       const history = {
-        messages: [
-          { type: 'user' as const, content: 'Hello' },
-          { type: 'assistant' as const, content: 'Hi there' },
-        ],
+        messages: [createUserEntry('Hello'), createAssistantEntry('Hi there')],
         messageCount: 2,
       };
 
@@ -224,15 +209,17 @@ describe('TranscriptService', () => {
       expect(tools).toHaveLength(0);
     });
 
-    it('extracts common tool names', () => {
+    it('extracts multiple tool calls from single message', () => {
       const history = {
         messages: [
-          { type: 'assistant' as const, content: 'Using Bash to run command' },
-          { type: 'assistant' as const, content: 'Using Edit to modify file' },
-          { type: 'assistant' as const, content: 'Using Glob to find files' },
-          { type: 'assistant' as const, content: 'Using Grep to search' },
+          createAssistantEntry([
+            createToolUseBlock('Bash', { command: 'ls' }),
+            createToolUseBlock('Edit', { file: 'test.ts' }),
+            createToolUseBlock('Glob', { pattern: '*.ts' }),
+            createToolUseBlock('Grep', { pattern: 'TODO' }),
+          ]),
         ],
-        messageCount: 4,
+        messageCount: 1,
       };
 
       const tools = service.extractToolCalls(history);
@@ -241,6 +228,7 @@ describe('TranscriptService', () => {
       expect(tools.some((t) => t.toolName === 'Edit')).toBe(true);
       expect(tools.some((t) => t.toolName === 'Glob')).toBe(true);
       expect(tools.some((t) => t.toolName === 'Grep')).toBe(true);
+      expect(tools).toHaveLength(4);
     });
   });
 

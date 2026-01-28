@@ -21,6 +21,7 @@ import {
 import {
   createAssistantEntry,
   createSummaryEntry,
+  createToolUseBlock,
   createTranscript,
   createUserEntry,
 } from '../../fixtures/transcript-factory.js';
@@ -368,12 +369,14 @@ Line 3 with conclusion`;
     });
 
     it('saves v2.0.0 context with conversation history from transcript', async () => {
-      // Create a transcript file
+      // Create a transcript file with tool_use blocks
       const transcript = createTranscript([
         createUserEntry('Hello, can you help me?'),
         createAssistantEntry('Of course! What do you need?'),
         createUserEntry('Read `src/index.ts` please'),
-        createAssistantEntry('Using Read tool to read the file'),
+        createAssistantEntry([
+          createToolUseBlock('Read', { file_path: 'src/index.ts' }),
+        ]),
       ]);
       await setupTranscriptFile(fs, transcriptPath, transcript);
 

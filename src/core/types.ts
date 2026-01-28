@@ -10,17 +10,116 @@ import { type Result, err, ok } from '../infrastructure/result.js';
 export const CONTEXT_VERSION = '2.0.0';
 
 /**
+ * Schema for assistant message content blocks.
+ * Claude Code uses an array of typed content blocks.
+ */
+export const ContentBlockSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('text'), text: z.string() }),
+  z.object({ type: z.literal('thinking'), thinking: z.string() }),
+  z.object({
+    type: z.literal('tool_use'),
+    id: z.string(),
+    name: z.string(),
+    input: z.unknown(),
+  }),
+  z.object({
+    type: z.literal('tool_result'),
+    tool_use_id: z.string(),
+    content: z.unknown(),
+  }),
+]);
+
+export type ContentBlock = z.infer<typeof ContentBlockSchema>;
+
+/**
+ * Schema for user message content blocks (tool results).
+ */
+export const UserContentBlockSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('tool_result'),
+    tool_use_id: z.string(),
+    content: z.unknown(),
+    is_error: z.boolean().optional(),
+  }),
+]);
+
+export type UserContentBlock = z.infer<typeof UserContentBlockSchema>;
+
+/**
  * Schema for individual transcript entries.
- * Discriminated union based on entry type.
+ * Matches the actual Claude Code JSONL transcript format.
  */
 export const TranscriptEntrySchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('user'), content: z.string() }),
-  z.object({ type: z.literal('assistant'), content: z.string() }),
-  z.object({ type: z.literal('summary'), summary: z.string() }),
-  z.object({ type: z.literal('system'), content: z.string() }),
+  // User message: message.content is a string or array of content blocks
+  z.object({
+    type: z.literal('user'),
+    message: z.object({
+      role: z.literal('user'),
+      content: z.union([z.string(), z.array(UserContentBlockSchema)]),
+    }),
+    uuid: z.string().optional(),
+    timestamp: z.string().optional(),
+  }),
+  // Assistant message: message.content is an array of content blocks
+  z.object({
+    type: z.literal('assistant'),
+    message: z.object({
+      role: z.literal('assistant'),
+      content: z.array(ContentBlockSchema),
+    }),
+    uuid: z.string().optional(),
+    timestamp: z.string().optional(),
+  }),
+  // Summary entry (from compaction)
+  z.object({
+    type: z.literal('summary'),
+    summary: z.string(),
+  }),
+  // Progress events (hooks, tool execution)
+  z.object({
+    type: z.literal('progress'),
+    data: z.unknown(),
+  }),
+  // File history snapshots
+  z.object({
+    type: z.literal('file-history-snapshot'),
+    snapshot: z.unknown(),
+  }),
 ]);
 
 export type TranscriptEntry = z.infer<typeof TranscriptEntrySchema>;
+
+/**
+ * Helper to extract text content from a transcript entry.
+ *
+ * @param entry - A transcript entry
+ * @returns The text content as a string, or empty string if not applicable
+ */
+export const getTranscriptEntryContent = (entry: TranscriptEntry): string => {
+  switch (entry.type) {
+    case 'user': {
+      const content = entry.message.content;
+      // User content can be a string or array of tool_result blocks
+      if (typeof content === 'string') {
+        return content;
+      }
+      // For tool results, we don't extract text content
+      return '';
+    }
+    case 'assistant': {
+      // Extract text from text blocks, join with newlines
+      const textBlocks = entry.message.content.filter(
+        (block): block is Extract<ContentBlock, { type: 'text' }> =>
+          block.type === 'text',
+      );
+      return textBlocks.map((block) => block.text).join('\n');
+    }
+    case 'summary':
+      return entry.summary;
+    default:
+      return '';
+  }
+};
 
 /**
  * Schema for conversation history extracted from transcript.

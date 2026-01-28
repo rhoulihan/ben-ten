@@ -1,9 +1,11 @@
 import type { FileSystem } from '../adapters/fs/memory-fs.js';
 import {
+  type ContentBlock,
   type ConversationHistory,
   type ToolExecution,
   type TranscriptEntry,
   TranscriptEntrySchema,
+  getTranscriptEntryContent,
 } from '../core/types.js';
 import {
   type BenTenError,
@@ -59,21 +61,6 @@ export interface TranscriptServiceDeps {
   logger: Logger;
 }
 
-/** Common Claude Code tool names to detect */
-const TOOL_NAMES = [
-  'Read',
-  'Write',
-  'Edit',
-  'Bash',
-  'Glob',
-  'Grep',
-  'Task',
-  'WebFetch',
-  'WebSearch',
-  'AskUserQuestion',
-  'NotebookEdit',
-];
-
 /**
  * Creates a transcript service for parsing Claude Code transcripts.
  *
@@ -104,16 +91,6 @@ export const createTranscriptService = (
     } catch {
       return null;
     }
-  };
-
-  /**
-   * Extract text content from a transcript entry.
-   */
-  const getEntryContent = (entry: TranscriptEntry): string => {
-    if (entry.type === 'summary') {
-      return entry.summary;
-    }
-    return entry.content;
   };
 
   const service: TranscriptService = {
@@ -184,7 +161,9 @@ export const createTranscriptService = (
       const backtickPattern = /`([^`]+\.[a-zA-Z0-9]+)`/g;
 
       for (const entry of history.messages) {
-        const content = getEntryContent(entry);
+        const content = getTranscriptEntryContent(entry);
+        if (!content) continue;
+
         let match = backtickPattern.exec(content);
         while (match) {
           const filePath = match[1];
@@ -214,15 +193,17 @@ export const createTranscriptService = (
           continue;
         }
 
-        const content = entry.content;
-        for (const toolName of TOOL_NAMES) {
-          // Look for patterns like "Using Read tool" or "Using Bash to"
-          const pattern = new RegExp(`Using ${toolName}\\b`, 'i');
-          if (pattern.test(content)) {
+        // Extract tool_use blocks directly from content
+        for (const block of entry.message.content) {
+          if (block.type === 'tool_use') {
+            const toolBlock = block as Extract<
+              ContentBlock,
+              { type: 'tool_use' }
+            >;
             tools.push({
-              toolName,
+              toolName: toolBlock.name,
               timestamp: now,
-              success: true, // Assume success if mentioned in response
+              success: true, // Assume success; could check for tool_result later
             });
           }
         }

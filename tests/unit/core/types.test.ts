@@ -248,7 +248,10 @@ describe('Core Types', () => {
 
   describe('TranscriptEntrySchema', () => {
     it('validates user entry', () => {
-      const entry = { type: 'user', content: 'Hello assistant' };
+      const entry = {
+        type: 'user',
+        message: { role: 'user', content: 'Hello assistant' },
+      };
 
       const result = TranscriptEntrySchema.safeParse(entry);
 
@@ -256,13 +259,19 @@ describe('Core Types', () => {
       if (result.success) {
         expect(result.data.type).toBe('user');
         if (result.data.type === 'user') {
-          expect(result.data.content).toBe('Hello assistant');
+          expect(result.data.message.content).toBe('Hello assistant');
         }
       }
     });
 
     it('validates assistant entry', () => {
-      const entry = { type: 'assistant', content: 'Hello user' };
+      const entry = {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Hello user' }],
+        },
+      };
 
       const result = TranscriptEntrySchema.safeParse(entry);
 
@@ -286,14 +295,25 @@ describe('Core Types', () => {
       }
     });
 
-    it('validates system entry', () => {
-      const entry = { type: 'system', content: 'System message' };
+    it('validates progress entry', () => {
+      const entry = { type: 'progress', data: { hookEvent: 'SessionStart' } };
 
       const result = TranscriptEntrySchema.safeParse(entry);
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.type).toBe('system');
+        expect(result.data.type).toBe('progress');
+      }
+    });
+
+    it('validates file-history-snapshot entry', () => {
+      const entry = { type: 'file-history-snapshot', snapshot: {} };
+
+      const result = TranscriptEntrySchema.safeParse(entry);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.type).toBe('file-history-snapshot');
       }
     });
 
@@ -310,8 +330,14 @@ describe('Core Types', () => {
     it('validates conversation with messages', () => {
       const history = {
         messages: [
-          { type: 'user', content: 'Hello' },
-          { type: 'assistant', content: 'Hi there' },
+          { type: 'user', message: { role: 'user', content: 'Hello' } },
+          {
+            type: 'assistant',
+            message: {
+              role: 'assistant',
+              content: [{ type: 'text', text: 'Hi there' }],
+            },
+          },
         ],
         messageCount: 2,
         tokenEstimate: 100,
@@ -412,8 +438,14 @@ describe('Core Types', () => {
         summary: 'Enriched context',
         conversation: {
           messages: [
-            { type: 'user', content: 'Hello' },
-            { type: 'assistant', content: 'Hi' },
+            { type: 'user', message: { role: 'user', content: 'Hello' } },
+            {
+              type: 'assistant',
+              message: {
+                role: 'assistant',
+                content: [{ type: 'text', text: 'Hi' }],
+              },
+            },
           ],
           messageCount: 2,
           tokenEstimate: 50,
@@ -504,7 +536,9 @@ describe('Core Types', () => {
         sessionId: 'session-123',
         summary: 'New context',
         conversation: {
-          messages: [{ type: 'user', content: 'Hello' }],
+          messages: [
+            { type: 'user', message: { role: 'user', content: 'Hello' } },
+          ],
           messageCount: 1,
         },
       };
