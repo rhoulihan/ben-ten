@@ -3,7 +3,7 @@
 [![CI](https://github.com/rhoulihan/ben-ten/actions/workflows/ci.yml/badge.svg)](https://github.com/rhoulihan/ben-ten/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-180%20passing-brightgreen)](https://github.com/rhoulihan/ben-ten)
+[![Tests](https://img.shields.io/badge/tests-230%20passing-brightgreen)](https://github.com/rhoulihan/ben-ten)
 
 **Photographic memory for Claude Code** - Named after Ben Tennyson's legendary photographic memory.
 
@@ -35,9 +35,9 @@ Verify the installation:
 ben-ten --version
 ```
 
-### Step 2: Configure Claude Code Hooks
+### Step 2: Configure Claude Code Hooks (Optional)
 
-Add hook configuration to your Claude Code settings. You can configure hooks at the user level (applies to all projects) or project level.
+Hooks enable automatic context loading on session start. They are **optional** — you can use Ben-Ten with just the MCP server if you prefer manual context management.
 
 **User-level configuration** (`~/.claude/settings.json`):
 
@@ -77,7 +77,7 @@ Add hook configuration to your Claude Code settings. You can configure hooks at 
 | `SessionStart` | After compaction (`source: "compact"`) | Loads existing context (no auto-save) |
 | `SessionStart` | With `source: "clear"` | Deletes existing context |
 
-**Note:** Context is saved only via the `ben-ten_save` MCP tool. This gives Claude control over when and what to save.
+**Note:** Context is saved only via the `ben_ten_save` MCP tool. This gives Claude control over when and what to save.
 
 ### Step 3: Configure MCP Server (Required for Saving)
 
@@ -111,10 +111,12 @@ Or add to your user-level MCP configuration (`~/.claude/mcp.json`):
 
 The MCP server exposes these tools to Claude:
 
-- `ben-ten_status` - Check if context exists
-- `ben-ten_save` - Save context with custom summary, keyFiles, and activeTasks
-- `ben-ten_load` - Load existing context
-- `ben-ten_clear` - Delete context
+- `ben_ten_status` - Check if context exists
+- `ben_ten_save` - Save context with summary, keyFiles, activeTasks, and optional transcriptPath
+- `ben_ten_load` - Load existing context
+- `ben_ten_clear` - Delete context
+
+**Transcript Auto-Discovery:** The `ben_ten_save` tool automatically discovers and parses Claude Code's transcript to extract conversation history, file references, and tool calls. No hooks required — it finds the most recent transcript in `~/.claude/projects/`.
 
 ### Step 4: Initialize Your Project (Optional)
 
@@ -181,10 +183,22 @@ Ben-Ten can also run as an MCP (Model Context Protocol) server, exposing tools f
 
 ### Tools
 
-- `ben-ten_status` - Get context status for the current project
-- `ben-ten_save` - Save context data
-- `ben-ten_load` - Load existing context
-- `ben-ten_clear` - Delete context
+| Tool | Description |
+|------|-------------|
+| `ben_ten_status` | Get context status for the current project |
+| `ben_ten_save` | Save context with summary, keyFiles, activeTasks. Auto-discovers transcript for enrichment. |
+| `ben_ten_load` | Load existing context |
+| `ben_ten_clear` | Delete context |
+
+#### ben_ten_save Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `sessionId` | Yes | Unique session identifier |
+| `summary` | Yes | Summary of the current session/context |
+| `keyFiles` | No | Array of important file paths |
+| `activeTasks` | No | Array of current tasks/objectives |
+| `transcriptPath` | No | Path to transcript file (auto-discovered if not provided) |
 
 ### Resources
 
@@ -196,15 +210,23 @@ Ben-Ten stores context in the following format:
 
 ```typescript
 interface ContextData {
-  version: string;        // Schema version
-  createdAt: number;      // Timestamp of first creation
-  updatedAt: number;      // Timestamp of last update
-  sessionId: string;      // Last session ID
-  summary: string;        // Compacted/session summary
-  keyFiles?: string[];    // Important files in the project
-  activeTasks?: string[]; // Current tasks/objectives
+  version: string;              // Schema version (currently "2.0.0")
+  createdAt: number;            // Timestamp of first creation
+  updatedAt: number;            // Timestamp of last update
+  sessionId: string;            // Last session ID
+  summary: string;              // Compacted/session summary
+  keyFiles?: string[];          // Important files in the project
+  activeTasks?: string[];       // Current tasks/objectives
+  conversation?: {              // Extracted from transcript
+    messages: TranscriptEntry[];
+    messageCount: number;
+  };
+  files?: FileMetadata[];       // File references extracted from conversation
+  toolHistory?: ToolExecution[]; // Tool calls extracted from conversation
 }
 ```
+
+The `conversation`, `files`, and `toolHistory` fields are automatically populated when Ben-Ten parses the Claude Code transcript during save.
 
 ## Development
 

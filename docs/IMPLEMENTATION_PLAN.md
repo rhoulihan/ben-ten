@@ -1,9 +1,34 @@
 # Ben-Ten Implementation Plan
 
-**Version:** 2.0
+**Version:** 2.1
 **Date:** January 2026
-**Status:** Ready for Implementation
+**Status:** MVP Implemented (Phase 1 Complete)
 **Architecture:** MCP-First Hybrid (MCP Server + Lifecycle Hooks)
+
+---
+
+## Implementation Status
+
+### Completed Features (MVP)
+- ✅ Core types and Zod validation schemas (v2.0.0)
+- ✅ Infrastructure (Result type, Logger, Error codes)
+- ✅ File system adapters (Node FS + Memory FS for testing)
+- ✅ Context service (load/save/delete operations)
+- ✅ Hook handler (SessionStart, PreCompact lifecycle events)
+- ✅ Transcript service with parsing and extraction
+- ✅ **Transcript auto-discovery** (finds transcripts in ~/.claude/projects/ without hooks)
+- ✅ MCP server with tools (ben_ten_status, ben_ten_save, ben_ten_load, ben_ten_clear)
+- ✅ MCP resource (ben-ten://context)
+- ✅ CLI commands (hook, status, show, clear, init, serve)
+- ✅ 230 tests passing
+
+### Pending Features
+- ⏳ MessagePack serialization (dependencies installed, not implemented)
+- ⏳ LZ4/ZSTD compression (dependencies installed, not implemented)
+- ⏳ Snapshot/compaction system (schema defined, no logic)
+- ⏳ Rolling checkpoints for crash recovery
+- ⏳ Configuration file loading (config.yaml)
+- ⏳ Content hashing (SHA-256 checksums)
 
 ---
 
@@ -211,9 +236,11 @@ ben-ten/
 │   │   └── index.ts                 # CLI entry point
 │   │
 │   ├── services/                    # Application services
-│   │   ├── context-manager.ts       # Main orchestrator
-│   │   ├── checkpoint-service.ts    # Periodic checkpointing
-│   │   └── snapshot-service.ts      # Compaction snapshot handling
+│   │   ├── context-service.ts       # Context CRUD operations ✅
+│   │   ├── hook-handler.ts          # Lifecycle hook handling ✅
+│   │   ├── transcript-service.ts    # Transcript parsing & auto-discovery ✅
+│   │   ├── checkpoint-service.ts    # Periodic checkpointing (planned)
+│   │   └── snapshot-service.ts      # Compaction snapshot handling (planned)
 │   │
 │   ├── infrastructure/              # Cross-cutting concerns
 │   │   ├── logger.ts                # Structured logging (stderr only!)
@@ -356,7 +383,43 @@ export const handlers: Record<string, HookHandler> = {
 
 ---
 
-### 3.3 Core: Context Module
+### 3.3 Transcript Service ✅ IMPLEMENTED
+
+**Purpose:** Parse Claude Code transcripts and extract structured data.
+
+**Public Interface:**
+```typescript
+export interface TranscriptService {
+  // Auto-discover transcript for a project (no hooks required)
+  discoverTranscriptPath(projectDir: string): Promise<Result<string | null, BenTenError>>;
+
+  // Parse transcript JSONL file
+  parseTranscript(path: string): Promise<Result<ConversationHistory, BenTenError>>;
+
+  // Extract file references from conversation
+  extractFileReferences(history: ConversationHistory): string[];
+
+  // Extract tool calls from conversation
+  extractToolCalls(history: ConversationHistory): ToolExecution[];
+
+  // Get latest summary from transcript
+  getLatestSummary(path: string): Promise<Result<string | null, BenTenError>>;
+}
+```
+
+**Transcript Auto-Discovery:**
+
+The `discoverTranscriptPath` method enables transcript extraction without requiring hooks:
+
+1. Converts project path to Claude Code format: `/mnt/c/Users/foo/project` → `-mnt-c-Users-foo-project`
+2. Looks in `~/.claude/projects/<project-path>/` for `.jsonl` files
+3. Returns the most recently modified transcript file
+
+This allows `ben_ten_save` to work without any hook configuration.
+
+---
+
+### 3.4 Core: Context Module
 
 **Purpose:** Define and manipulate ContextState without I/O operations.
 
