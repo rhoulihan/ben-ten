@@ -3,7 +3,7 @@
 [![CI](https://github.com/rhoulihan/ben-ten/actions/workflows/ci.yml/badge.svg)](https://github.com/rhoulihan/ben-ten/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-325%20passing-brightgreen)](https://github.com/rhoulihan/ben-ten)
+[![Tests](https://img.shields.io/badge/tests-336%20passing-brightgreen)](https://github.com/rhoulihan/ben-ten)
 
 **Photographic memory for Claude Code** - Named after Ben Tennyson's legendary photographic memory.
 
@@ -119,6 +119,7 @@ The MCP server exposes these tools to Claude:
 - `ben_ten_load` - Load existing context
 - `ben_ten_clear` - Delete context
 - `ben_ten_config` - Get or set configuration (maxReplayPercent, contextWindowSize)
+- `ben_ten_loadMore` - Load more context by going back to the previous stopping point
 
 **Transcript Auto-Discovery:** The `ben_ten_save` tool automatically discovers and parses Claude Code's transcript to extract conversation history, file references, and tool calls. No hooks required — it finds the most recent transcript in `~/.claude/projects/`.
 
@@ -194,6 +195,7 @@ Ben-Ten can also run as an MCP (Model Context Protocol) server, exposing tools f
 | `ben_ten_load` | Load existing context |
 | `ben_ten_clear` | Delete context |
 | `ben_ten_config` | Get or set configuration settings (maxReplayPercent, contextWindowSize) |
+| `ben_ten_loadMore` | Load more conversation context by going back to the previous stopping point. Call repeatedly to progressively load more context. |
 
 #### ben_ten_save Parameters
 
@@ -260,6 +262,16 @@ ben_ten_config action=set key=maxReplayPercent value=15
 # Set context window size (default: 200000 tokens)
 ben_ten_config action=set key=contextWindowSize value=128000
 ```
+
+### Loading More Context
+
+If the initial replay doesn't provide enough context, use `ben_ten_loadMore` to load back to the previous stopping point:
+
+```
+> Need more context? Call `ben_ten_loadMore` to load back to the previous stopping point (2 more available).
+```
+
+Call `ben_ten_loadMore` repeatedly to progressively load more conversation history. Each call moves to an earlier stopping point, giving you more context about the previous session.
 
 ### Binary File Format
 

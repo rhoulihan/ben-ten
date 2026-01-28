@@ -17,13 +17,13 @@
 - ✅ Hook handler (SessionStart, PreCompact lifecycle events)
 - ✅ Transcript service with parsing and extraction
 - ✅ **Transcript auto-discovery** (finds transcripts in ~/.claude/projects/ without hooks)
-- ✅ MCP server with tools (ben_ten_status, ben_ten_save, ben_ten_load, ben_ten_clear, ben_ten_config)
+- ✅ MCP server with tools (ben_ten_status, ben_ten_save, ben_ten_load, ben_ten_clear, ben_ten_config, ben_ten_loadMore)
 - ✅ MCP resource (ben-ten://context)
 - ✅ CLI commands (hook, status, show, clear, init, serve)
 - ✅ **LZ4 compression** for context storage (~90% size reduction)
 - ✅ **Conversation Replay** - generates condensed replays with intelligent stopping points
 - ✅ **Configuration service** - maxReplayPercent, contextWindowSize settings
-- ✅ 325 tests passing
+- ✅ 336 tests passing
 
 ### Pending Features
 - ⏳ MessagePack serialization (dependencies installed, not implemented)
@@ -318,6 +318,7 @@ export async function startServer(server: McpServer): Promise<void>;
 | `ben-ten_restore` | Restore context | `{ name?: string, mode?: RestoreMode }` |
 | `ben-ten_status` | Get context status | `{}` |
 | `ben-ten_config` | Get/set configuration | `{ action: 'get' \| 'set', key?, value? }` |
+| `ben-ten_loadMore` | Load more context to previous stopping point | `{}` |
 | `ben-ten_diff` | Show filesystem changes | `{}` |
 | `ben-ten_clear` | Clear context | `{ force?: boolean }` |
 | `ben-ten_snapshot_list` | List compaction snapshots | `{ verbose?: boolean }` |
