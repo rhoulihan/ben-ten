@@ -14,6 +14,9 @@ export default defineConfig({
         'src/**/index.ts',
         'src/bin/**', // CLI entry point - tested via integration
         'src/adapters/fs/node-fs.ts', // Real FS adapter - tested via integration
+        'src/mcp/transport.ts', // MCP stdio transport - tested via integration
+        'src/mcp/http-server.ts', // HTTP server - tested via integration
+        'src/mcp/http-transport.ts', // HTTP transport - tested via integration
       ],
       thresholds: {
         lines: 65,
