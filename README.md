@@ -11,8 +11,9 @@ Ben-Ten persists context across Claude Code sessions, allowing Claude to remembe
 
 ## Features
 
-- **Automatic Context Persistence** - Hooks into Claude Code lifecycle events to save context automatically
-- **Post-Compaction Recovery** - Captures compacted summaries so context survives memory limits
+- **Context Detection on Startup** - Hooks detect existing context and prompt you to load it
+- **On-Demand Save & Load** - Save context anytime via `ben_ten_save`, load via `ben_ten_load`
+- **Post-Compaction Recovery** - Context persists through Claude's memory compaction
 - **Conversation Replay** - Generates condensed conversation replays from transcripts with intelligent stopping points
 - **LZ4 Compression** - Context files are compressed with LZ4 for ~90% size reduction
 - **MCP Server** - Exposes tools and resources for programmatic context management
@@ -153,9 +154,11 @@ Once installed, Ben-Ten works like this:
 
 1. **Start Claude Code** - Hook detects if context exists and prompts you
 2. **Load context** - Call `ben_ten_load` to restore previous session
-3. **Work with Claude** - Claude can call `ben_ten_save` to save context at any time
-4. **End session** - Saved context persists for next time
-5. **Resume later** - Previous context is offered automatically
+3. **Work with Claude** - Work normally on your project
+4. **Save before ending** - Ask Claude to call `ben_ten_save` to persist context
+5. **Resume later** - Previous context is detected and offered on next startup
+
+**Note:** Context saving is on-demand, not automatic. Before ending a session, ask Claude to save context if you want to resume later.
 
 ## MCP Tools
 
