@@ -12,6 +12,20 @@ import { BEN10_DIR } from './context-service.js';
 export const CONFIG_FILE = 'config.json';
 
 /**
+ * Remote server configuration for global context storage.
+ */
+export interface RemoteConfig {
+  /** URL of the Ben-Ten remote server (e.g., http://localhost:3456) */
+  serverUrl: string;
+  /** API key for authentication */
+  apiKey?: string;
+  /** Whether remote storage is enabled */
+  enabled: boolean;
+  /** Automatically sync to both local and remote on save */
+  autoSync?: boolean;
+}
+
+/**
  * Ben-Ten configuration options.
  */
 export interface BenTenConfig {
@@ -19,6 +33,8 @@ export interface BenTenConfig {
   maxReplayPercent: number;
   /** Assumed context window size in tokens (default: 100000) */
   contextWindowSize: number;
+  /** Remote server configuration */
+  remote?: RemoteConfig;
 }
 
 /** Default configuration values */
@@ -75,6 +91,32 @@ const clamp = (value: number, min: number, max: number): number => {
 };
 
 /**
+ * Validates remote configuration.
+ *
+ * @param remote - Remote config to validate
+ * @returns Validated remote config or undefined
+ */
+const validateRemoteConfig = (remote: unknown): RemoteConfig | undefined => {
+  if (!remote || typeof remote !== 'object') {
+    return undefined;
+  }
+
+  const r = remote as Record<string, unknown>;
+
+  // serverUrl is required
+  if (typeof r.serverUrl !== 'string' || !r.serverUrl) {
+    return undefined;
+  }
+
+  return {
+    serverUrl: r.serverUrl.replace(/\/+$/, ''), // Remove trailing slashes
+    apiKey: typeof r.apiKey === 'string' ? r.apiKey : undefined,
+    enabled: typeof r.enabled === 'boolean' ? r.enabled : false,
+    autoSync: typeof r.autoSync === 'boolean' ? r.autoSync : undefined,
+  };
+};
+
+/**
  * Validates and normalizes configuration values.
  * Clamps values to valid ranges.
  *
@@ -97,6 +139,12 @@ const validateConfig = (config: Partial<BenTenConfig>): BenTenConfig => {
       10000,
       Number.MAX_SAFE_INTEGER,
     );
+  }
+
+  // Validate and preserve remote config
+  const remoteConfig = validateRemoteConfig(config.remote);
+  if (remoteConfig) {
+    validated.remote = remoteConfig;
   }
 
   return validated;

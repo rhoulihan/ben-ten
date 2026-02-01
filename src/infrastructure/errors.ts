@@ -42,6 +42,19 @@ export const ErrorCode = {
   // Transcript errors
   TRANSCRIPT_NOT_FOUND: 'TRANSCRIPT_NOT_FOUND',
   TRANSCRIPT_PARSE_ERROR: 'TRANSCRIPT_PARSE_ERROR',
+
+  // Network errors
+  NETWORK_UNREACHABLE: 'NETWORK_UNREACHABLE',
+  NETWORK_TIMEOUT: 'NETWORK_TIMEOUT',
+  NETWORK_AUTH_FAILED: 'NETWORK_AUTH_FAILED',
+
+  // Remote context errors
+  REMOTE_CONTEXT_NOT_FOUND: 'REMOTE_CONTEXT_NOT_FOUND',
+  REMOTE_SERVER_ERROR: 'REMOTE_SERVER_ERROR',
+
+  // Project identification errors
+  NO_GIT_REMOTE: 'NO_GIT_REMOTE',
+  GIT_COMMAND_FAILED: 'GIT_COMMAND_FAILED',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

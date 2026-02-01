@@ -22,6 +22,8 @@ export interface SessionStartResult {
   contextSaved: boolean;
   contextCleared: boolean;
   context?: ContextData;
+  /** Source where context was loaded from */
+  source?: 'local' | 'remote';
 }
 
 /** Result of handling a PreCompact event */
@@ -106,7 +108,7 @@ export const createHookHandler = (deps: HookHandlerDeps): HookHandler => {
           if (await contextService.hasContext()) {
             const loadResult = await contextService.loadContext();
             if (loadResult.ok) {
-              logger.info('Context loaded', {
+              logger.info('Context loaded from local storage', {
                 sessionId: loadResult.value.sessionId,
               });
               return ok({
@@ -114,6 +116,7 @@ export const createHookHandler = (deps: HookHandlerDeps): HookHandler => {
                 contextSaved: false,
                 contextCleared: false,
                 context: loadResult.value,
+                source: 'local',
               });
             }
             // Log warning but don't fail - context may be corrupted
@@ -135,14 +138,18 @@ export const createHookHandler = (deps: HookHandlerDeps): HookHandler => {
           if (await contextService.hasContext()) {
             const loadResult = await contextService.loadContext();
             if (loadResult.ok) {
-              logger.info('Context loaded after compaction', {
-                sessionId: loadResult.value.sessionId,
-              });
+              logger.info(
+                'Context loaded from local storage after compaction',
+                {
+                  sessionId: loadResult.value.sessionId,
+                },
+              );
               return ok({
                 contextLoaded: true,
                 contextSaved: false,
                 contextCleared: false,
                 context: loadResult.value,
+                source: 'local',
               });
             }
           }
@@ -182,6 +189,7 @@ export const createHookHandler = (deps: HookHandlerDeps): HookHandler => {
                 contextSaved: false,
                 contextCleared: false,
                 context: loadResult.value,
+                source: 'local',
               });
             }
           }

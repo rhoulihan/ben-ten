@@ -9,7 +9,7 @@
 
 ## Implementation Status
 
-### Completed Features (MVP)
+### Completed Features (MVP+)
 - ✅ Core types and Zod validation schemas (v2.0.0)
 - ✅ Infrastructure (Result type, Logger, Error codes)
 - ✅ File system adapters (Node FS + Memory FS for testing)
@@ -17,20 +17,24 @@
 - ✅ Hook handler (SessionStart, PreCompact lifecycle events)
 - ✅ Transcript service with parsing and extraction
 - ✅ **Transcript auto-discovery** (finds transcripts in ~/.claude/projects/ without hooks)
-- ✅ MCP server with tools (ben_ten_status, ben_ten_save, ben_ten_load, ben_ten_clear, ben_ten_config, ben_ten_loadMore)
+- ✅ MCP server with tools (ben_ten_status, ben_ten_save, ben_ten_load, ben_ten_clear, ben_ten_config, ben_ten_loadMore, ben_ten_list_contexts, ben_ten_remote_summary, ben_ten_remote_segments)
 - ✅ MCP resource (ben-ten://context)
-- ✅ CLI commands (hook, status, show, clear, init, serve)
+- ✅ CLI commands (hook, status, show, clear, init, serve, serve-http, remote status/push/pull, config)
 - ✅ **LZ4 compression** for context storage (~90% size reduction)
 - ✅ **Conversation Replay** - generates condensed replays with intelligent stopping points
-- ✅ **Configuration service** - maxReplayPercent, contextWindowSize settings
-- ✅ 336 tests passing
+- ✅ **Configuration service** - maxReplayPercent, contextWindowSize, remote settings
+- ✅ **Remote storage** - HTTP server for syncing context across machines
+- ✅ **Context resolution service** - multi-source context loading (local/remote/auto)
+- ✅ **Project identifier service** - consistent project hash generation
+- ✅ **Docker support** - Dockerfile and docker-compose.yml for remote server
+- ✅ **Prompt-before-load** - hooks show context preview and prompt user to load
+- ✅ 381 tests passing
 
 ### Pending Features
 - ⏳ MessagePack serialization (dependencies installed, not implemented)
 - ⏳ ZSTD compression for archival snapshots
 - ⏳ Snapshot/compaction system (schema defined, no logic)
 - ⏳ Rolling checkpoints for crash recovery
-- ⏳ Configuration file loading (config.yaml)
 - ⏳ Content hashing (SHA-256 checksums)
 
 ---

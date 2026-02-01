@@ -9,10 +9,14 @@ import {
 } from '../core/types.js';
 import type { Logger } from '../infrastructure/logger.js';
 import {
+  type BenTenConfig,
   DEFAULT_CONFIG,
   createConfigService,
 } from '../services/config-service.js';
+import { createContextResolutionService } from '../services/context-resolution-service.js';
 import { createContextService } from '../services/context-service.js';
+import { createProjectIdentifierService } from '../services/project-identifier-service.js';
+import { createRemoteContextService } from '../services/remote-context-service.js';
 import { createReplayService } from '../services/replay-service.js';
 import { createTranscriptService } from '../services/transcript-service.js';
 
@@ -26,12 +30,43 @@ export interface McpTransportDeps {
  * Creates and starts a Ben-Ten MCP server with stdio transport.
  * This is the main entry point for running Ben-Ten as an MCP server.
  */
+/**
+ * Create optional remote context service if remote config is enabled.
+ */
+const createOptionalRemoteService = (config: BenTenConfig, logger: Logger) => {
+  if (!config.remote?.enabled || !config.remote?.serverUrl) {
+    return undefined;
+  }
+
+  return createRemoteContextService({
+    logger,
+    serverUrl: config.remote.serverUrl,
+    apiKey: config.remote.apiKey,
+  });
+};
+
 export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
   const { fs, logger, projectDir } = deps;
   const contextService = createContextService({ fs, logger, projectDir });
   const transcriptService = createTranscriptService({ fs, logger });
   const configService = createConfigService({ fs, logger, projectDir });
   const replayService = createReplayService({ logger });
+  const projectIdentifierService = createProjectIdentifierService({ logger });
+
+  // Load config to check for remote settings
+  const configResult = await configService.loadConfig();
+  const config = configResult.ok ? configResult.value : DEFAULT_CONFIG;
+
+  // Create optional remote service
+  const remoteContextService = createOptionalRemoteService(config, logger);
+
+  // Create context resolution service
+  const contextResolutionService = createContextResolutionService({
+    logger,
+    localContextService: contextService,
+    remoteContextService,
+    projectIdentifierService,
+  });
 
   // Create the MCP server
   const server = new McpServer({
@@ -94,6 +129,12 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
           .describe(
             'Path to the transcript JSONL file for extracting conversation history, file references, and tool calls',
           ),
+        scope: z
+          .enum(['local', 'remote', 'both'])
+          .optional()
+          .describe(
+            'Where to save: "local" (default), "remote", or "both". Uses autoSync from config if not specified.',
+          ),
       },
     },
     async ({
@@ -102,6 +143,7 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
       keyFiles,
       activeTasks,
       transcriptPath: providedTranscriptPath,
+      scope,
     }) => {
       // Preserve createdAt if updating
       let createdAt = Date.now();
@@ -169,10 +211,13 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
           }
 
           // Generate conversation replay
-          const configResult = await configService.loadConfig();
-          const config = configResult.ok ? configResult.value : DEFAULT_CONFIG;
+          const replayConfigResult = await configService.loadConfig();
+          const replayConfig = replayConfigResult.ok
+            ? replayConfigResult.value
+            : DEFAULT_CONFIG;
           const maxTokens = Math.floor(
-            (config.contextWindowSize * config.maxReplayPercent) / 100,
+            (replayConfig.contextWindowSize * replayConfig.maxReplayPercent) /
+              100,
           );
 
           const replayResult = replayService.generateReplay(
@@ -207,7 +252,26 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
         }
       }
 
-      const saveResult = await contextService.saveContext(contextData);
+      // Determine save targets based on scope and config
+      let saveLocal = true;
+      let saveRemote = false;
+
+      if (scope === 'remote') {
+        saveLocal = false;
+        saveRemote = true;
+      } else if (scope === 'both') {
+        saveLocal = true;
+        saveRemote = true;
+      } else if (!scope && config.remote?.autoSync) {
+        // Use autoSync from config if no scope specified
+        saveRemote = true;
+      }
+
+      const saveResult = await contextResolutionService.saveContext(
+        contextData,
+        { projectDir, saveLocal, saveRemote },
+      );
+
       if (!saveResult.ok) {
         return {
           content: [
@@ -228,6 +292,10 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
               {
                 saved: true,
                 path: contextService.getContextPath(),
+                savedTo: {
+                  local: saveLocal,
+                  remote: saveRemote,
+                },
               },
               null,
               2,
@@ -243,27 +311,157 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
     'ben_ten_load',
     {
       description: 'Load context data from .ben-ten/context.json',
-      inputSchema: {},
+      inputSchema: {
+        scope: z
+          .enum(['local', 'remote', 'auto'])
+          .optional()
+          .describe(
+            'Where to load from: "local", "remote", or "auto" (default). Auto resolves from both sources.',
+          ),
+      },
     },
-    async () => {
-      const loadResult = await contextService.loadContext();
-      if (!loadResult.ok) {
+    async ({ scope }) => {
+      // If scope is specified, load from that source directly
+      if (scope === 'local') {
+        const loadResult = await contextService.loadContext();
+        if (!loadResult.ok) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Error loading local context: ${loadResult.error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
         return {
           content: [
             {
               type: 'text' as const,
-              text: `Error loading context: ${loadResult.error.message}`,
+              text: JSON.stringify(
+                { ...loadResult.value, _source: 'local' },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+
+      if (scope === 'remote' && remoteContextService) {
+        const identifierResult =
+          await projectIdentifierService.getProjectIdentifier(projectDir);
+        if (!identifierResult.ok) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Error identifying project: ${identifierResult.error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const loadResult = await remoteContextService.loadContext(
+          identifierResult.value.projectHash,
+        );
+        if (!loadResult.ok) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Error loading remote context: ${loadResult.error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
+                { ...loadResult.value, _source: 'remote' },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+
+      // Auto mode: use context resolution service
+      const resolveResult = await contextResolutionService.resolveContext({
+        projectDir,
+      });
+
+      if (!resolveResult.ok) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Error resolving context: ${resolveResult.error.message}`,
             },
           ],
           isError: true,
         };
       }
 
+      const result = resolveResult.value;
+
+      // If user needs to choose, return the available options
+      if (result.needsChoice) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
+                {
+                  needsChoice: true,
+                  message:
+                    'Multiple contexts available. Call ben_ten_load with scope: "local" or "remote".',
+                  locations: result.locations,
+                  projectHash: result.projectHash,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+
+      // If no context found
+      if (result.selected === 'none') {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
+                {
+                  found: false,
+                  message: 'No context found in local or remote storage.',
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+
+      // Return the resolved context
       return {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify(loadResult.value, null, 2),
+            text: JSON.stringify(
+              { ...result.context, _source: result.selected },
+              null,
+              2,
+            ),
           },
         ],
       };
@@ -461,10 +659,13 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
       }
 
       // Get config for token budget
-      const configResult = await configService.loadConfig();
-      const config = configResult.ok ? configResult.value : DEFAULT_CONFIG;
+      const loadMoreConfigResult = await configService.loadConfig();
+      const loadMoreConfig = loadMoreConfigResult.ok
+        ? loadMoreConfigResult.value
+        : DEFAULT_CONFIG;
       const maxTokens = Math.floor(
-        (config.contextWindowSize * config.maxReplayPercent) / 100,
+        (loadMoreConfig.contextWindowSize * loadMoreConfig.maxReplayPercent) /
+          100,
       );
 
       // Generate new replay with next stopping point
@@ -542,6 +743,232 @@ export const startMcpServer = async (deps: McpTransportDeps): Promise<void> => {
               '',
               replayResult.value.replay,
             ].join('\n'),
+          },
+        ],
+      };
+    },
+  );
+
+  // Register ben_ten_list_contexts tool
+  server.registerTool(
+    'ben_ten_list_contexts',
+    {
+      description:
+        'List available contexts from local and remote storage with metadata',
+      inputSchema: {},
+    },
+    async () => {
+      const locations =
+        await contextResolutionService.getAvailableLocations(projectDir);
+
+      if (!locations.ok) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Error listing contexts: ${locations.error.message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const result = {
+        projectHash: locations.value.projectHash,
+        local: locations.value.local
+          ? {
+              exists: true,
+              sessionId: locations.value.local.sessionId,
+              updatedAt: new Date(
+                locations.value.local.updatedAt,
+              ).toISOString(),
+              summaryPreview: locations.value.local.summaryPreview,
+            }
+          : { exists: false },
+        remote: locations.value.remote
+          ? {
+              exists: true,
+              sessionId: locations.value.remote.sessionId,
+              updatedAt: new Date(
+                locations.value.remote.updatedAt,
+              ).toISOString(),
+              summaryPreview: locations.value.remote.summaryPreview,
+            }
+          : { exists: false },
+        remoteEnabled: !!remoteContextService,
+      };
+
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    },
+  );
+
+  // Register ben_ten_remote_summary tool
+  server.registerTool(
+    'ben_ten_remote_summary',
+    {
+      description: 'Get context summary from remote server without full load',
+      inputSchema: {
+        projectHash: z
+          .string()
+          .optional()
+          .describe(
+            'Project hash to query. If not provided, uses current project.',
+          ),
+      },
+    },
+    async ({ projectHash: providedHash }) => {
+      if (!remoteContextService) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Remote storage is not configured. Enable it in config.',
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Use provided hash or get from current project
+      let projectHash = providedHash;
+      if (!projectHash) {
+        const identifierResult =
+          await projectIdentifierService.getProjectIdentifier(projectDir);
+        if (!identifierResult.ok) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Error identifying project: ${identifierResult.error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        projectHash = identifierResult.value.projectHash;
+      }
+
+      const summaryResult =
+        await remoteContextService.getContextSummary(projectHash);
+
+      if (!summaryResult.ok) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Error getting summary: ${summaryResult.error.message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify(summaryResult.value, null, 2),
+          },
+        ],
+      };
+    },
+  );
+
+  // Register ben_ten_remote_segments tool
+  server.registerTool(
+    'ben_ten_remote_segments',
+    {
+      description: 'Get transcript segments from remote server on demand',
+      inputSchema: {
+        projectHash: z
+          .string()
+          .optional()
+          .describe(
+            'Project hash to query. If not provided, uses current project.',
+          ),
+        startIndex: z
+          .number()
+          .optional()
+          .describe('Starting message index (default: 0)'),
+        limit: z
+          .number()
+          .optional()
+          .describe('Maximum number of messages to return (default: all)'),
+        messageType: z
+          .enum(['user', 'assistant', 'all'])
+          .optional()
+          .describe('Filter by message type (default: all)'),
+      },
+    },
+    async ({ projectHash: providedHash, startIndex, limit, messageType }) => {
+      if (!remoteContextService) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Remote storage is not configured. Enable it in config.',
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Use provided hash or get from current project
+      let projectHash = providedHash;
+      if (!projectHash) {
+        const identifierResult =
+          await projectIdentifierService.getProjectIdentifier(projectDir);
+        if (!identifierResult.ok) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Error identifying project: ${identifierResult.error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        projectHash = identifierResult.value.projectHash;
+      }
+
+      const segmentsResult = await remoteContextService.getTranscriptSegments(
+        projectHash,
+        { startIndex, limit, messageType },
+      );
+
+      if (!segmentsResult.ok) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Error getting segments: ${segmentsResult.error.message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify(
+              {
+                projectHash,
+                segmentCount: segmentsResult.value.length,
+                segments: segmentsResult.value,
+              },
+              null,
+              2,
+            ),
           },
         ],
       };

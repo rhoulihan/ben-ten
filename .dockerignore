@@ -1,0 +1,46 @@
+# Dependencies
+node_modules
+
+# Build output (will be rebuilt in container)
+dist
+
+# Development files
+.git
+.gitignore
+.github
+
+# Test files
+tests
+coverage
+*.test.ts
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+
+# Documentation
+*.md
+docs
+
+# Local config
+.env
+.env.local
+.env.*.local
+
+# Ben-Ten local storage
+.ben-ten
+.ben10
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Docker files (prevent recursive issues)
+Dockerfile*
+docker-compose*

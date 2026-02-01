@@ -3,7 +3,7 @@
 [![CI](https://github.com/rhoulihan/ben-ten/actions/workflows/ci.yml/badge.svg)](https://github.com/rhoulihan/ben-ten/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-336%20passing-brightgreen)](https://github.com/rhoulihan/ben-ten)
+[![Tests](https://img.shields.io/badge/tests-381%20passing-brightgreen)](https://github.com/rhoulihan/ben-ten)
 
 **Photographic memory for Claude Code** - Named after Ben Tennyson's legendary photographic memory.
 
@@ -16,6 +16,7 @@ Ben-Ten persists context across Claude Code sessions, allowing Claude to remembe
 - **Conversation Replay** - Generates condensed conversation replays from transcripts with intelligent stopping points
 - **LZ4 Compression** - Context files are compressed with LZ4 for ~90% size reduction
 - **MCP Server** - Exposes tools and resources for programmatic context management
+- **Remote Storage** - Optional HTTP server for syncing context across machines
 - **Configurable Token Budget** - Control replay size via `maxReplayPercent` and `contextWindowSize` settings
 - **Zero Configuration** - Works out of the box with sensible defaults
 
@@ -38,11 +39,55 @@ Verify the installation:
 ben-ten --version
 ```
 
-### Step 2: Configure Claude Code Hooks (Optional)
+### Step 2: Configure MCP Server (Required)
 
-Hooks enable automatic context loading on session start. They are **optional** — you can use Ben-Ten with just the MCP server if you prefer manual context management.
+The MCP server provides the Ben-Ten tools that Claude uses to save and load context.
 
-**User-level configuration** (`~/.claude/settings.json`):
+**Global configuration** (recommended - works across all projects):
+
+```bash
+# Add ben-ten MCP server with user scope
+claude mcp add ben-ten --scope user -- ben-ten serve
+```
+
+Or manually add to `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "ben-ten": {
+      "type": "stdio",
+      "command": "ben-ten",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+**Project-level configuration** (`.mcp.json` in project root):
+
+```json
+{
+  "mcpServers": {
+    "ben-ten": {
+      "command": "ben-ten",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+Verify the MCP server is configured:
+
+```bash
+claude mcp list
+```
+
+### Step 3: Configure Hooks (Optional)
+
+Hooks enable automatic context detection on session start. They are **optional** — you can use Ben-Ten with just the MCP server if you prefer manual context management.
+
+**Global hooks** (`~/.claude/settings.local.json`):
 
 ```json
 {
@@ -57,71 +102,32 @@ Hooks enable automatic context loading on session start. They are **optional** �
 }
 ```
 
-**Project-level configuration** (`.claude/settings.json` in your project root):
+#### Hook Behavior
 
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "type": "command",
-        "command": "ben-ten hook"
-      }
-    ]
-  }
-}
+When hooks are configured, Ben-Ten prompts you when context is found:
+
+```
+# Ben-Ten Context Found
+
+**Session:** previous-session
+**Last Updated:** 2 hours ago (2026-01-28T14:30:00.000Z)
+**Source:** Local
+
+## Summary Preview
+Working on feature X with files A, B, C...
+
+---
+
+To load this context, call `ben_ten_load`.
 ```
 
-#### Hook Events Explained
+This gives you control over whether to load previous context in each session.
 
 | Hook | When It Fires | Ben-Ten Action |
 |------|---------------|--------------|
-| `SessionStart` | When Claude Code starts or resumes | Loads saved context into the conversation |
-| `SessionStart` | After compaction (`source: "compact"`) | Loads existing context (no auto-save) |
+| `SessionStart` | When Claude Code starts or resumes | Detects context and prompts to load |
+| `SessionStart` | After compaction (`source: "compact"`) | Loads existing context |
 | `SessionStart` | With `source: "clear"` | Deletes existing context |
-
-**Note:** Context is saved only via the `ben_ten_save` MCP tool. This gives Claude control over when and what to save.
-
-### Step 3: Configure MCP Server (Required for Saving)
-
-The MCP server provides the `ben-ten_save` tool that Claude uses to save context.
-
-Create `.mcp.json` in your project root:
-
-```json
-{
-  "mcpServers": {
-    "ben-ten": {
-      "command": "ben-ten",
-      "args": ["serve"]
-    }
-  }
-}
-```
-
-Or add to your user-level MCP configuration (`~/.claude/mcp.json`):
-
-```json
-{
-  "mcpServers": {
-    "ben-ten": {
-      "command": "ben-ten",
-      "args": ["serve"]
-    }
-  }
-}
-```
-
-The MCP server exposes these tools to Claude:
-
-- `ben_ten_status` - Check if context exists
-- `ben_ten_save` - Save context with summary, keyFiles, activeTasks, and optional transcriptPath
-- `ben_ten_load` - Load existing context
-- `ben_ten_clear` - Delete context
-- `ben_ten_config` - Get or set configuration (maxReplayPercent, contextWindowSize)
-- `ben_ten_loadMore` - Load more context by going back to the previous stopping point
-
-**Transcript Auto-Discovery:** The `ben_ten_save` tool automatically discovers and parses Claude Code's transcript to extract conversation history, file references, and tool calls. No hooks required — it finds the most recent transcript in `~/.claude/projects/`.
 
 ### Step 4: Initialize Your Project (Optional)
 
@@ -135,7 +141,7 @@ This creates a `.ben-ten/` directory in your project. This step is optional—Be
 ### Verifying Installation
 
 1. Start a new Claude Code session in your project
-2. You should see "Ben-Ten Context Loaded" in the startup output (if context exists)
+2. If hooks are configured and context exists, you'll see the "Context Found" prompt
 3. Check context status anytime:
    ```bash
    ben-ten status
@@ -145,23 +151,46 @@ This creates a `.ben-ten/` directory in your project. This step is optional—Be
 
 Once installed, Ben-Ten works like this:
 
-1. **Start Claude Code** - Context is loaded from `.ben-ten/context.ctx` if it exists
-2. **Work with Claude** - Claude can call `ben-ten_save` to save context at any time
-3. **End session** - Saved context persists for next time
-4. **Resume later** - Previous context is restored automatically
+1. **Start Claude Code** - Hook detects if context exists and prompts you
+2. **Load context** - Call `ben_ten_load` to restore previous session
+3. **Work with Claude** - Claude can call `ben_ten_save` to save context at any time
+4. **End session** - Saved context persists for next time
+5. **Resume later** - Previous context is offered automatically
 
-## How It Works
+## MCP Tools
 
-Ben-Ten integrates with Claude Code through hooks and MCP:
+Ben-Ten exposes these tools to Claude:
 
-| Component | Action |
-|-----------|--------|
-| `SessionStart` hook | Loads existing context from `.ben-ten/context.ctx` |
-| `ben-ten_save` MCP tool | Saves context (summary, keyFiles, activeTasks) with LZ4 compression |
-| `ben-ten_load` MCP tool | Loads context programmatically |
-| `ben-ten_clear` MCP tool | Deletes context |
+| Tool | Description |
+|------|-------------|
+| `ben_ten_status` | Get context status for the current project |
+| `ben_ten_save` | Save context with summary, keyFiles, activeTasks. Supports local and remote storage. |
+| `ben_ten_load` | Load existing context from local or remote storage |
+| `ben_ten_clear` | Delete context |
+| `ben_ten_config` | Get or set configuration (maxReplayPercent, contextWindowSize) |
+| `ben_ten_loadMore` | Load more conversation context by going back to the previous stopping point |
+| `ben_ten_list_contexts` | List available contexts from local and remote storage |
+| `ben_ten_remote_summary` | Get context summary from remote server without full load |
+| `ben_ten_remote_segments` | Get transcript segments from remote server on demand |
 
-Context is stored in `.ben-ten/context.ctx` (LZ4-compressed binary format) at your project root. Legacy `context.json` files are automatically migrated.
+### ben_ten_save Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `sessionId` | Yes | Unique session identifier |
+| `summary` | Yes | Summary of the current session/context |
+| `keyFiles` | No | Array of important file paths |
+| `activeTasks` | No | Array of current tasks/objectives |
+| `transcriptPath` | No | Path to transcript file (auto-discovered if not provided) |
+| `scope` | No | Where to save: `"local"` (default), `"remote"`, or `"both"` |
+
+### ben_ten_load Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `scope` | No | Where to load from: `"local"`, `"remote"`, or `"auto"` (default) |
+
+**Transcript Auto-Discovery:** The `ben_ten_save` tool automatically discovers and parses Claude Code's transcript to extract conversation history, file references, and tool calls. No hooks required — it finds the most recent transcript in `~/.claude/projects/`.
 
 ## CLI Commands
 
@@ -178,38 +207,91 @@ ben-ten show
 # Delete context
 ben-ten clear
 
+# Start MCP server (usually started by Claude Code)
+ben-ten serve
+
+# Start HTTP server for remote storage
+ben-ten serve-http --port 3456
+
 # Process Claude Code hooks (used by hooks, not typically run manually)
 ben-ten hook
+
+# Remote storage commands
+ben-ten remote status    # Check remote server connection
+ben-ten remote push      # Push local context to remote
+ben-ten remote pull      # Pull context from remote to local
+
+# Configuration
+ben-ten config remote.serverUrl http://localhost:3456
+ben-ten config remote.enabled true
+ben-ten config remote.autoSync true
 ```
 
-## MCP Server
+## Remote Storage
 
-Ben-Ten can also run as an MCP (Model Context Protocol) server, exposing tools for context management:
+Ben-Ten supports syncing context to a remote HTTP server, allowing you to share context across machines.
 
-### Tools
+### Starting the Remote Server
 
-| Tool | Description |
-|------|-------------|
-| `ben_ten_status` | Get context status for the current project |
-| `ben_ten_save` | Save context with summary, keyFiles, activeTasks. Auto-discovers transcript for enrichment and generates conversation replay. |
-| `ben_ten_load` | Load existing context |
-| `ben_ten_clear` | Delete context |
-| `ben_ten_config` | Get or set configuration settings (maxReplayPercent, contextWindowSize) |
-| `ben_ten_loadMore` | Load more conversation context by going back to the previous stopping point. Call repeatedly to progressively load more context. |
+```bash
+# Start with default settings (port 3456)
+ben-ten serve-http
 
-#### ben_ten_save Parameters
+# Start with custom options
+ben-ten serve-http --port 8080 --storage ~/.ben-ten-server --api-key your-secret-key
+```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `sessionId` | Yes | Unique session identifier |
-| `summary` | Yes | Summary of the current session/context |
-| `keyFiles` | No | Array of important file paths |
-| `activeTasks` | No | Array of current tasks/objectives |
-| `transcriptPath` | No | Path to transcript file (auto-discovered if not provided) |
+### Using Docker
 
-### Resources
+```bash
+# Build and start with Docker Compose
+docker compose up -d
 
-- `ben-ten://context` - Read the current project context
+# Check server health
+curl http://localhost:3456/api/health
+```
+
+### Configuring Remote Storage
+
+Configure your project to use remote storage:
+
+```bash
+# Set remote server URL
+ben-ten config remote.serverUrl http://localhost:3456
+
+# Enable remote storage
+ben-ten config remote.enabled true
+
+# Enable auto-sync (save to both local and remote)
+ben-ten config remote.autoSync true
+
+# Set API key if required
+ben-ten config remote.apiKey your-secret-key
+```
+
+Or create `.ben-ten/config.json`:
+
+```json
+{
+  "remote": {
+    "serverUrl": "http://localhost:3456",
+    "enabled": true,
+    "autoSync": true,
+    "apiKey": "your-secret-key"
+  }
+}
+```
+
+### Remote API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Health check |
+| `/api/context/:projectHash` | GET | Get context for project |
+| `/api/context/:projectHash` | PUT | Save context for project |
+| `/api/context/:projectHash` | DELETE | Delete context for project |
+| `/api/context/:projectHash/summary` | GET | Get context summary only |
+| `/api/context/:projectHash/segments` | GET | Get transcript segments |
 
 ## Context Data Structure
 
@@ -234,13 +316,13 @@ interface ContextData {
     messageCount: number;
     stoppingPointType: string | null;
     generatedAt: number;
+    allStoppingPoints: StoppingPoint[];
+    currentStopIndex: number;
   };
   files?: FileMetadata[];       // File references extracted from conversation
   toolHistory?: ToolExecution[]; // Tool calls extracted from conversation
 }
 ```
-
-The `conversation`, `conversationReplay`, `files`, and `toolHistory` fields are automatically populated when Ben-Ten parses the Claude Code transcript during save.
 
 ### Conversation Replay
 
@@ -287,6 +369,10 @@ Context files (`.ctx`) use a custom binary format with LZ4 compression:
 
 This achieves ~90% compression on typical context data while maintaining fast read/write speeds.
 
+## MCP Resources
+
+- `ben-ten://context` - Read the current project context as markdown
+
 ## Development
 
 ```bash
@@ -321,14 +407,21 @@ src/
 ├── core/            # Core types and schemas
 ├── infrastructure/  # Cross-cutting concerns (errors, logging, Result type)
 ├── mcp/             # MCP server implementation
+│   ├── server.ts    # Tool and resource handlers
+│   ├── transport.ts # stdio transport
+│   ├── http-server.ts    # HTTP server for remote storage
+│   └── http-transport.ts # HTTP transport implementation
 ├── services/        # Business logic
-│   ├── context-service.ts      # Context persistence
-│   ├── compression-service.ts  # LZ4 compression wrapper
-│   ├── config-service.ts       # Configuration management
-│   ├── replay-service.ts       # Conversation replay generation
-│   ├── serializer-service.ts   # Binary format serialization
-│   ├── hook-handler.ts         # Claude Code hook handling
-│   └── transcript-service.ts   # Transcript parsing
+│   ├── context-service.ts           # Context persistence
+│   ├── context-resolution-service.ts # Multi-source context resolution
+│   ├── compression-service.ts       # LZ4 compression wrapper
+│   ├── config-service.ts            # Configuration management
+│   ├── project-identifier-service.ts # Project hash generation
+│   ├── remote-context-service.ts    # Remote storage client
+│   ├── replay-service.ts            # Conversation replay generation
+│   ├── serializer-service.ts        # Binary format serialization
+│   ├── hook-handler.ts              # Claude Code hook handling
+│   └── transcript-service.ts        # Transcript parsing
 └── types/           # External type declarations
 ```
 
@@ -338,6 +431,7 @@ src/
 - **Dependency Injection** - All services accept dependencies for testability
 - **In-Memory FS** - Tests use memory filesystem for isolation and speed
 - **Zod Schemas** - Runtime validation of all external data
+- **Multi-Source Resolution** - Context can come from local or remote storage
 
 ## Contributing
 

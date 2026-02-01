@@ -107,6 +107,33 @@ describe('HookHandler', () => {
           );
         }
       });
+
+      it('includes source field indicating where context was loaded from', async () => {
+        const existingContext: ContextData = {
+          version: '1.0.0',
+          createdAt: 1000,
+          updatedAt: 2000,
+          sessionId: 'previous-session',
+          summary: 'Previous session summary',
+        };
+        await fs.writeFile(
+          `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
+          JSON.stringify(existingContext),
+        );
+
+        const input = createHookInput({
+          hook_event_name: 'SessionStart',
+          source: 'startup',
+        });
+
+        const result = await handler.handleSessionStart(input);
+
+        expect(isOk(result)).toBe(true);
+        if (isOk(result)) {
+          expect(result.value.contextLoaded).toBe(true);
+          expect(result.value.source).toBe('local');
+        }
+      });
     });
 
     describe('with source="resume"', () => {

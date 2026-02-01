@@ -111,7 +111,7 @@ describe('hook-command', () => {
       expect(isErr(result)).toBe(true);
     });
 
-    it('outputs context to stdout when loading on startup', async () => {
+    it('prompts user before loading context when it exists', async () => {
       const existingContext: ContextData = {
         version: '1.0.0',
         createdAt: 1000,
@@ -119,7 +119,6 @@ describe('hook-command', () => {
         sessionId: 'previous-session',
         summary: 'Previous session summary for stdout',
       };
-      // Write to legacy JSON format for test fixture
       await fs.writeFile(
         `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
         JSON.stringify(existingContext),
@@ -137,13 +136,44 @@ describe('hook-command', () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.value.output).toContain(
-          'Previous session summary for stdout',
-        );
+        // Should prompt, not auto-load
+        expect(result.value.output).toContain('Context Found');
+        expect(result.value.output).toContain('ben_ten_load');
+        // Should show preview info
+        expect(result.value.output).toContain('previous-session');
       }
     });
 
-    it('includes replay metadata in output', async () => {
+    it('shows summary preview in prompt', async () => {
+      const existingContext: ContextData = {
+        version: '1.0.0',
+        createdAt: 1000,
+        updatedAt: 2000,
+        sessionId: 'previous-session',
+        summary: 'This is a test summary that should appear in the preview',
+      };
+      await fs.writeFile(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
+        JSON.stringify(existingContext),
+      );
+
+      const input = JSON.stringify({
+        session_id: 'test-session',
+        transcript_path: '/home/user/.claude/sessions/test.jsonl',
+        cwd: projectDir,
+        hook_event_name: 'SessionStart',
+        source: 'startup',
+      });
+
+      const result = await runHookCommand(input, { fs });
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.output).toContain('This is a test summary');
+      }
+    });
+
+    it('does not auto-load replay metadata (requires explicit ben_ten_load)', async () => {
       const existingContext: ContextData = {
         version: '2.0.0',
         createdAt: 1000,
@@ -181,57 +211,14 @@ describe('hook-command', () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.value.output).toContain('Recent Conversation');
-        expect(result.value.output).toContain('Stopped at: git_commit');
-        expect(result.value.output).toContain('Stopping point 1 of 2');
+        // Should prompt, not auto-load replay
+        expect(result.value.output).toContain('Context Found');
+        expect(result.value.output).not.toContain('Recent Conversation');
+        expect(result.value.output).toContain('ben_ten_load');
       }
     });
 
-    it('shows ben_ten_loadMore instruction when more stopping points available', async () => {
-      const existingContext: ContextData = {
-        version: '2.0.0',
-        createdAt: 1000,
-        updatedAt: Date.now() - 60000,
-        sessionId: 'previous-session',
-        summary: 'Summary',
-        conversationReplay: '## Recent Conversation\n\n**User:** Hello',
-        replayMetadata: {
-          tokenCount: 100,
-          messageCount: 5,
-          stoppingPointType: 'git_commit',
-          generatedAt: Date.now(),
-          allStoppingPoints: [
-            { index: 10, type: 'git_commit' },
-            { index: 5, type: 'task_completion' },
-            { index: 2, type: 'semantic_marker' },
-          ],
-          currentStopIndex: 0,
-          startMessageIndex: 11,
-        },
-      };
-      await fs.writeFile(
-        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
-        JSON.stringify(existingContext),
-      );
-
-      const input = JSON.stringify({
-        session_id: 'test-session',
-        transcript_path: '/tmp/test.jsonl',
-        cwd: projectDir,
-        hook_event_name: 'SessionStart',
-        source: 'startup',
-      });
-
-      const result = await runHookCommand(input, { fs });
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value.output).toContain('ben_ten_loadMore');
-        expect(result.value.output).toContain('2 more available');
-      }
-    });
-
-    it('shows human-readable time ago', async () => {
+    it('shows human-readable time ago in prompt', async () => {
       const existingContext: ContextData = {
         version: '2.0.0',
         createdAt: 1000,
@@ -256,7 +243,40 @@ describe('hook-command', () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
+        expect(result.value.output).toContain('Context Found');
         expect(result.value.output).toContain('2 hours ago');
+      }
+    });
+
+    it('truncates long summaries in preview', async () => {
+      const longSummary = 'A'.repeat(300);
+      const existingContext: ContextData = {
+        version: '2.0.0',
+        createdAt: 1000,
+        updatedAt: Date.now(),
+        sessionId: 'previous-session',
+        summary: longSummary,
+      };
+      await fs.writeFile(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
+        JSON.stringify(existingContext),
+      );
+
+      const input = JSON.stringify({
+        session_id: 'test-session',
+        transcript_path: '/tmp/test.jsonl',
+        cwd: projectDir,
+        hook_event_name: 'SessionStart',
+        source: 'startup',
+      });
+
+      const result = await runHookCommand(input, { fs });
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        // Should truncate to 200 chars + ...
+        expect(result.value.output).toContain(`${'A'.repeat(200)}...`);
+        expect(result.value.output).not.toContain('A'.repeat(201));
       }
     });
   });

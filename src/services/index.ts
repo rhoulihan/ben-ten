@@ -36,6 +36,7 @@ export {
   type ConfigService,
   type ConfigServiceDeps,
   type BenTenConfig,
+  type RemoteConfig,
   CONFIG_FILE,
   DEFAULT_CONFIG,
 } from './config-service.js';
@@ -54,3 +55,29 @@ export {
   isTaskCompletion,
   isSemanticMarker,
 } from './replay-service.js';
+
+export {
+  createProjectIdentifierService,
+  type ProjectIdentifierService,
+  type ProjectIdentifierServiceDeps,
+  type ProjectIdentifier,
+} from './project-identifier-service.js';
+
+export {
+  createRemoteContextService,
+  type RemoteContextService,
+  type RemoteContextServiceDeps,
+  type ContextSummary,
+  type SegmentOptions,
+  type TranscriptSegment,
+} from './remote-context-service.js';
+
+export {
+  createContextResolutionService,
+  type ContextResolutionService,
+  type ContextResolutionServiceDeps,
+  type ContextLocation,
+  type ContextResolutionResult,
+  type ContextResolutionOptions,
+  type ContextSaveOptions,
+} from './context-resolution-service.js';

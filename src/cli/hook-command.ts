@@ -75,7 +75,7 @@ export const runHookCommand = async (
   // Build output for stdout
   let output = '';
 
-  // For SessionStart with loaded context, output the summary
+  // For SessionStart with detected context, prompt user before loading
   if (hookInput.hook_event_name === 'SessionStart') {
     const result = handleResult.value as SessionStartResult;
     if (result.contextLoaded && result.context) {
@@ -101,52 +101,29 @@ export const runHookCommand = async (
             : 'just now';
       }
 
+      // Format source as display string
+      const sourceDisplay = result.source === 'remote' ? 'Remote' : 'Local';
+
+      // Truncate summary for preview (first 200 chars)
+      const summaryPreview =
+        ctx.summary.length > 200
+          ? `${ctx.summary.slice(0, 200)}...`
+          : ctx.summary;
+
       output = [
-        '# Ben-Ten Context Loaded',
+        '# Ben-Ten Context Found',
         '',
-        `**Previous Session:** ${ctx.sessionId}`,
+        `**Session:** ${ctx.sessionId}`,
         `**Last Updated:** ${timeAgo} (${lastUpdated.toISOString()})`,
+        `**Source:** ${sourceDisplay}`,
         '',
-        '## Summary',
-        ctx.summary,
+        '## Summary Preview',
+        summaryPreview,
+        '',
+        '---',
+        '',
+        'To load this context, call `ben_ten_load`.',
       ].join('\n');
-
-      if (ctx.keyFiles && ctx.keyFiles.length > 0) {
-        output += '\n\n## Key Files\n';
-        output += ctx.keyFiles.map((f) => `- ${f}`).join('\n');
-      }
-
-      if (ctx.activeTasks && ctx.activeTasks.length > 0) {
-        output += '\n\n## Active Tasks\n';
-        output += ctx.activeTasks.map((t) => `- ${t}`).join('\n');
-      }
-
-      // Include conversation replay if available
-      if (ctx.conversationReplay) {
-        output += `\n\n${ctx.conversationReplay}`;
-
-        if (ctx.replayMetadata) {
-          const meta = ctx.replayMetadata;
-          const totalStops = meta.allStoppingPoints?.length ?? 0;
-          const currentStop = (meta.currentStopIndex ?? -1) + 1;
-          const remainingStops = totalStops - currentStop;
-
-          output += '\n\n---\n';
-          output += `*Replay: ${meta.messageCount} messages, ~${meta.tokenCount} tokens`;
-          if (meta.stoppingPointType) {
-            output += ` | Stopped at: ${meta.stoppingPointType}`;
-          }
-          if (totalStops > 0) {
-            output += ` | Stopping point ${currentStop} of ${totalStops}`;
-          }
-          output += '*';
-
-          // Add instruction for loading more context if there are more stopping points
-          if (remainingStops > 0) {
-            output += `\n\n> **Need more context?** Call \`ben_ten_loadMore\` to load back to the previous stopping point (${remainingStops} more available).`;
-          }
-        }
-      }
     }
   }
 
