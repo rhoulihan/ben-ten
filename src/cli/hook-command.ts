@@ -9,6 +9,7 @@ import {
 import { LogLevel, createLogger } from '../infrastructure/logger.js';
 import { type Result, err, ok } from '../infrastructure/result.js';
 import {
+  type PreCompactResult,
   type SessionStartResult,
   createHookHandler,
 } from '../services/hook-handler.js';
@@ -124,6 +125,16 @@ export const runHookCommand = async (
         '',
         'To load this context, call `ben_ten_load`.',
       ].join('\n');
+    }
+  }
+
+  // For PreCompact, output status message
+  if (hookInput.hook_event_name === 'PreCompact') {
+    const result = handleResult.value as PreCompactResult;
+    if (result.contextSaved) {
+      output = `# Ben-Ten: Context auto-saved before compaction\n\n**Session:** ${result.sessionId}\n**Trigger:** ${hookInput.trigger ?? 'auto'}`;
+    } else if (result.error) {
+      output = `# Ben-Ten: Failed to auto-save context\n\n**Error:** ${result.error}`;
     }
   }
 

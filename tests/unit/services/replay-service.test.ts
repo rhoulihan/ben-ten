@@ -573,7 +573,7 @@ describe('ReplayService', () => {
     });
 
     it('formats Bash tool with truncated command', () => {
-      const longCommand = 'echo ' + 'test '.repeat(20);
+      const longCommand = `echo ${'test '.repeat(20)}`;
       const messages: TranscriptEntry[] = [
         createAssistantEntry([
           createToolUseBlock('Bash', { command: longCommand }),

@@ -27,7 +27,11 @@ export interface SessionStartResult {
 }
 
 /** Result of handling a PreCompact event */
-export type PreCompactResult = Record<string, never>;
+export interface PreCompactResult {
+  contextSaved: boolean;
+  sessionId?: string;
+  error?: string;
+}
 
 /** Union of all hook results */
 export type HookResult = SessionStartResult | PreCompactResult;
@@ -202,10 +206,69 @@ export const createHookHandler = (deps: HookHandlerDeps): HookHandler => {
       }
     },
 
-    async handlePreCompact(_input) {
-      // PreCompact is a no-op - we use SessionStart with source="compact" instead
-      logger.debug('PreCompact is a no-op');
-      return ok({});
+    async handlePreCompact(input) {
+      const projectDir = input.cwd;
+      const contextService = createContextService({ fs, logger, projectDir });
+
+      logger.debug(
+        'Handling PreCompact - auto-saving context before compaction',
+        {
+          sessionId: input.session_id,
+          trigger: input.trigger,
+          projectDir,
+        },
+      );
+
+      // Load existing context to preserve it
+      let existingContext: ContextData | undefined;
+      if (await contextService.hasContext()) {
+        const loadResult = await contextService.loadContext();
+        if (loadResult.ok) {
+          existingContext = loadResult.value;
+        }
+      }
+
+      // Create or update context with pre-compaction marker
+      const now = Date.now();
+      const contextToSave: ContextData = existingContext
+        ? {
+            ...existingContext,
+            updatedAt: now,
+            sessionId: input.session_id,
+            isPreCompactionSnapshot: true,
+            compactionTrigger: input.trigger ?? 'auto',
+          }
+        : {
+            version: '2.0.0',
+            createdAt: now,
+            updatedAt: now,
+            sessionId: input.session_id,
+            summary: 'Auto-saved before compaction',
+            isPreCompactionSnapshot: true,
+            compactionTrigger: input.trigger ?? 'auto',
+          };
+
+      const saveResult = await contextService.saveContext(contextToSave);
+      if (!saveResult.ok) {
+        logger.warn('Failed to auto-save context before compaction', {
+          error: saveResult.error.message,
+        });
+        return ok({
+          contextSaved: false,
+          sessionId: input.session_id,
+          error: saveResult.error.message,
+        });
+      }
+
+      logger.info('Context auto-saved before compaction', {
+        sessionId: input.session_id,
+        trigger: input.trigger,
+      });
+
+      return ok({
+        contextSaved: true,
+        sessionId: input.session_id,
+      });
     },
 
     async handle(input) {

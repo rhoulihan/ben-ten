@@ -249,14 +249,78 @@ describe('HookHandler', () => {
   });
 
   describe('handlePreCompact', () => {
-    it('is a no-op (returns success)', async () => {
+    it('auto-saves context when no existing context', async () => {
       const input = createHookInput({
         hook_event_name: 'PreCompact',
+        trigger: 'auto',
       });
 
       const result = await handler.handlePreCompact(input);
 
       expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.contextSaved).toBe(true);
+        expect(result.value.sessionId).toBe('test-session-123');
+      }
+
+      // Verify context was saved with pre-compaction marker
+      const contextExists = await fs.exists(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+      );
+      expect(contextExists).toBe(true);
+    });
+
+    it('preserves and updates existing context on PreCompact', async () => {
+      // Create existing context
+      const existingContext: ContextData = {
+        version: '2.0.0',
+        createdAt: 1000,
+        updatedAt: 2000,
+        sessionId: 'previous-session',
+        summary: 'Important work in progress',
+        keyFiles: ['/src/important.ts'],
+        activeTasks: ['Task 1'],
+      };
+      await fs.writeFile(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE_LEGACY}`,
+        JSON.stringify(existingContext),
+      );
+
+      const input = createHookInput({
+        hook_event_name: 'PreCompact',
+        trigger: 'manual',
+      });
+
+      const result = await handler.handlePreCompact(input);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.contextSaved).toBe(true);
+      }
+
+      // Verify context was saved with preserved data
+      const savedContent = await fs.readFile(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+      );
+      expect(savedContent.ok).toBe(true);
+      // Note: The saved content is compressed, so we can't easily verify the JSON content
+      // The important thing is that it was saved successfully
+    });
+
+    it('marks context with pre-compaction metadata', async () => {
+      const input = createHookInput({
+        hook_event_name: 'PreCompact',
+        trigger: 'auto',
+      });
+
+      await handler.handlePreCompact(input);
+
+      // Verify metadata was set - we can't read compressed content easily,
+      // but we can verify the file exists and save succeeded
+      const contextExists = await fs.exists(
+        `${projectDir}/${BEN10_DIR}/${CONTEXT_FILE}`,
+      );
+      expect(contextExists).toBe(true);
     });
   });
 

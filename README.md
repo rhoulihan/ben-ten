@@ -3,7 +3,7 @@
 [![CI](https://github.com/rhoulihan/ben-ten/actions/workflows/ci.yml/badge.svg)](https://github.com/rhoulihan/ben-ten/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-381%20passing-brightgreen)](https://github.com/rhoulihan/ben-ten)
+[![Tests](https://img.shields.io/badge/tests-383%20passing-brightgreen)](https://github.com/rhoulihan/ben-ten)
 
 **Photographic memory for Claude Code** - Named after Ben Tennyson's legendary photographic memory.
 
@@ -12,6 +12,7 @@ Ben-Ten persists context across Claude Code sessions, allowing Claude to remembe
 ## Features
 
 - **Context Detection on Startup** - Hooks detect existing context and prompt you to load it
+- **Auto-Save on Compaction** - PreCompact hook automatically saves context before memory compaction
 - **On-Demand Save & Load** - Save context anytime via `ben_ten_save`, load via `ben_ten_load`
 - **Post-Compaction Recovery** - Context persists through Claude's memory compaction
 - **Conversation Replay** - Generates condensed conversation replays from transcripts with intelligent stopping points
@@ -98,6 +99,12 @@ Hooks enable automatic context detection on session start. They are **optional**
         "type": "command",
         "command": "ben-ten hook"
       }
+    ],
+    "PreCompact": [
+      {
+        "type": "command",
+        "command": "ben-ten hook"
+      }
     ]
   }
 }
@@ -129,6 +136,7 @@ This gives you control over whether to load previous context in each session.
 | `SessionStart` | When Claude Code starts or resumes | Detects context and prompts to load |
 | `SessionStart` | After compaction (`source: "compact"`) | Loads existing context |
 | `SessionStart` | With `source: "clear"` | Deletes existing context |
+| `PreCompact` | Before context compaction (auto or manual) | Auto-saves context |
 
 ### Step 4: Initialize Your Project (Optional)
 
